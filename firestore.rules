@@ -1,20 +1,11 @@
+
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Default deny
     match /{document=**} {
-      allow read, write: if false;
-    }
-
-    // User profile data
-    match /artifacts/{appId}/users/{userId}/profile/data {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
-    }
-
-    // Global statistics (read-only for users)
-    match /istatistikler/{docId} {
-      allow read: if true;
-      allow write: if false; 
+      // Geçici olarak herkese izin veriyoruz (Test bittikten sonra burayı kapatacağız)
+      allow read, write: if true;
     }
   }
 }
