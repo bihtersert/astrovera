@@ -1,0 +1,8 @@
+{
+  "name": "ASTROVERA",
+  "description": "Lüks ve mistik bir astroloji platformu. Kişiselleştirilmiş harita analizleri, uzman ritüeller ve kozmik AI rehberliği.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "Stores astrological profile and state for a user.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "birthDate": { "type": "string" },
+        "birthTime": { "type": "string" },
+        "isTaskDone": { "type": "boolean" },
+        "analysisCount": { "type": "integer" },
+        "ritualCount": { "type": "integer" }
+      }
+    },
+    "AppStats": {
+      "title": "Application Statistics",
+      "description": "Global statistics for the application.",
+      "type": "object",
+      "properties": {
+        "analizYapildi": { "type": "integer" },
+        "rituelTamamlandi": { "type": "integer" }
+      }
+    }
+  },
+  "firestore": {
+    "/artifacts/{appId}/users/{userId}/profile/data": {
+      "schema": "UserProfile",
+      "description": "User specific astrophysical data."
+    },
+    "/istatistikler/genel": {
+      "schema": "AppStats",
+      "description": "Global app usage statistics."
+    }
+  }
+}

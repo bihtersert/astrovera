@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ASTROVERA | Kozmik Sırdaşın</title>
+    
+    <!-- PWA Desteği -->
+    <meta name="theme-color" content="#000000">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    
+    <!-- Kütüphaneler -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;900&display=swap" rel="stylesheet">
+    
+    <!-- Firebase SDK (Modular) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, onSnapshot, increment } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Global Firebase state
+        window.firebaseData = { db: null, auth: null, user: null, appId: 'astrovera-app' };
+
+        // Configuration
+        const firebaseConfig = {
+          apiKey: "%VITE_FIREBASE_API_KEY%",
+          authDomain: "%VITE_FIREBASE_AUTH_DOMAIN%",
+          projectId: "%VITE_FIREBASE_PROJECT_ID%",
+          storageBucket: "%VITE_FIREBASE_STORAGE_BUCKET%",
+          messagingSenderId: "%VITE_FIREBASE_MESSAGING_SENDER_ID%",
+          appId: "%VITE_FIREBASE_APP_ID%"
+        };
+        const app = initializeApp(firebaseConfig);
+        window.firebaseData.db = getFirestore(app, "%VITE_FIREBASE_FIRESTORE_DATABASE_ID%");
+        window.firebaseData.auth = getAuth(app);
+        window.firebaseData.appId = 'astrovera-app';
+        // Expose functions for use in regular script tags
+        window.firebaseData.doc = doc;
+        window.firebaseData.setDoc = setDoc;
+        window.firebaseData.getDoc = getDoc;
+        window.firebaseData.onSnapshot = onSnapshot;
+        window.firebaseData.increment = increment;
+
+        const provider = new GoogleAuthProvider();
+
+        // Auth initialization
+        window.loginWithGoogle = async () => {
+            try {
+                const result = await signInWithPopup(window.firebaseData.auth, provider);
+                console.log("Giriş yapıldı:", result.user.displayName);
+            } catch (e) {
+                console.error("Giriş hatası:", e);
+                alert("Giriş yapılamadı. Lütfen tekrar deneyin.");
+            }
+        };
+
+        onAuthStateChanged(window.firebaseData.auth, (user) => {
+            if (user) {
+                window.firebaseData.user = user;
+                console.log("Kozmik Bağlantı Aktif: ", user.uid);
+                listenToUserProfile(user.uid);
+                listenToStats();
+                document.getElementById('auth-section').classList.add('hidden');
+                document.getElementById('main-content').classList.remove('hidden');
+            } else {
+                document.getElementById('auth-section').classList.remove('hidden');
+                document.getElementById('main-content').classList.add('hidden');
+            }
+        });
+
+        // Global istatistikleri takip et (opsiyonel, şu an profil kişisel veriye odaklı)
+        function listenToStats() {
+            // Global istatistikler gerekiyorsa burası kullanılabilir
+        }
+
+        // Veri Takibi (Listener)
+        function listenToUserProfile(userId) {
+            const docRef = doc(window.firebaseData.db, 'artifacts', window.firebaseData.appId, 'users', userId, 'profile', 'data');
+            onSnapshot(docRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    updateUIFromDB(data);
+                }
+            }, (error) => console.error("Firestore Hatası:", error));
+        }
+
+        function updateUIFromDB(data) {
+            if (data.name) {
+                document.getElementById('profile-name-display').innerText = data.name;
+                document.getElementById('user-name').value = data.name;
+            }
+            if (data.birthDate) document.getElementById('birth-date').value = data.birthDate;
+            if (data.birthTime) document.getElementById('birth-time').value = data.birthTime;
+            
+            // Profil Sayaçlarını Güncelle
+            if (document.getElementById("analiz-sayisi")) document.getElementById("analiz-sayisi").innerText = data.analysisCount || 0;
+            if (document.getElementById("rituel-sayisi-val")) document.getElementById("rituel-sayisi-val").innerText = data.ritualCount || 0;
+            
+            // Ritüel Seviye ve İlerleme Hesapla
+            const rCount = data.ritualCount || 0;
+            const level = Math.floor(rCount / 5) + 1;
+            const exp = rCount % 5;
+            const prog = (exp / 5) * 100;
+            
+            if (document.getElementById("ritual-level")) document.getElementById("ritual-level").innerText = level;
+            if (document.getElementById("ritual-exp-txt")) document.getElementById("ritual-exp-txt").innerText = `${exp}/5`;
+            if (document.getElementById("ritual-mastery-bar")) {
+                document.getElementById("ritual-mastery-bar").style.width = `${prog}%`;
+            }
+            
+            // Ritüel durumunu yükle
+            if (data.isTaskDone) {
+                window.isTaskDone = true;
+                applyCompletionUI(true);
+            } else {
+                window.isTaskDone = false;
+                applyCompletionUI(false);
+            }
+        }
+    </script>
+
+    <style>
+        :root { --gold: #d4af37; --purple: #7c3aed; --black: #000000; --success: #10b981; }
+        body { font-family: 'Inter', sans-serif; background-color: var(--black); color: white; margin: 0; padding: 0; overflow-x: hidden; -webkit-tap-highlight-color: transparent; }
+        .glass { background: rgba(255, 255, 255, 0.02); backdrop-filter: blur(25px); -webkit-backdrop-filter: blur(25px); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 32px; }
+        .page { display: none; opacity: 0; transform: translateY(15px); transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1); }
+        .page.active { display: block; opacity: 1; transform: translateY(0); }
+        #star-canvas { position: fixed; top: 0; left: 0; z-index: -1; pointer-events: none; }
+        .gold-shimmer { background: linear-gradient(to right, #94a3b8, var(--gold), #fff, var(--gold), #94a3b8); background-size: 200% auto; -webkit-background-clip: text; color: transparent; animation: shimmer 8s linear infinite; }
+        @keyframes shimmer { to { background-position: 200% center; } }
+        .nav-link.active { color: var(--gold); transform: scale(1.15); }
+        .typing::after { content: '|'; animation: blink 1s infinite; color: var(--gold); }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+        .nebula { position: fixed; top: -20%; right: -10%; width: 100vw; height: 100vw; background: radial-gradient(circle, rgba(124, 58, 237, 0.07) 0%, transparent 70%); z-index: -1; filter: blur(120px); animation: breathe 20s infinite alternate ease-in-out; }
+        @keyframes breathe { from { transform: scale(1); opacity: 0.3; } to { transform: scale(1.2); opacity: 0.6; } }
+        .btn-glow { box-shadow: 0 0 20px rgba(212, 175, 55, 0.1); transition: all 0.3s ease; }
+        .btn-glow:active { transform: scale(0.96); box-shadow: 0 0 40px rgba(212, 175, 55, 0.3); }
+        .progress-bar-container { width: 100%; height: 4px; background: rgba(255,255,255,0.05); border-radius: 10px; overflow: hidden; margin: 20px 0; }
+        #chart-progress { width: 0%; height: 100%; background: linear-gradient(90deg, var(--gold), var(--purple)); transition: width 0.3s ease; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: rgba(255,255,255,0.02); }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: var(--gold); border-radius: 10px; opacity: 0.3; }
+        .house-item { border-bottom: 1px solid rgba(255,255,255,0.03); padding: 16px 0; display: flex; justify-content: space-between; align-items: center; }
+        .retro-badge { background: linear-gradient(90deg, #ef4444, #7c3aed); padding: 4px 12px; border-radius: 99px; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; }
+        .ritual-task { border-left: 4px solid var(--gold); padding-left: 16px; margin-top: 16px; transition: all 0.5s ease; }
+        .task-completed { border-left-color: var(--success); opacity: 0.7; }
+        .task-completed p { text-decoration: line-through; color: #94a3b8; }
+        .btn-complete { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); padding: 10px 20px; border-radius: 16px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; transition: all 0.3s ease; }
+        .btn-complete.done { background: var(--success); color: black; border-color: transparent; }
+        .ai-pulse { animation: ai-breathe 2s infinite ease-in-out; }
+        @keyframes ai-breathe { 0%, 100% { opacity: 0.5; transform: scale(0.98); } 50% { opacity: 1; transform: scale(1.02); } }
+    </style>
+</head>
+<body class="antialiased">
+
+    <canvas id="star-canvas"></canvas>
+    <div class="nebula"></div>
+
+    <div id="auth-section" class="hidden fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center p-6 text-center">
+        <canvas id="auth-star-canvas" class="absolute inset-0 z-0"></canvas>
+        <div class="relative z-10 space-y-8">
+            <div class="flex flex-col items-center gap-4">
+                <div class="w-20 h-20 bg-gradient-to-tr from-amber-500 to-amber-900 rounded-[32px] flex items-center justify-center shadow-2xl rotate-12">
+                    <i class="fa-solid fa-star-and-crescent text-black text-3xl -rotate-12"></i>
+                </div>
+                <h1 class="text-4xl font-black italic gold-shimmer tracking-tighter">ASTROVERA</h1>
+            </div>
+            <p class="text-slate-400 font-light max-w-xs mx-auto">Kozmik sırlarını keşfetmek için yıldızlarla bağlantı kur.</p>
+            <button onclick="loginWithGoogle()" class="w-full bg-white text-black font-black py-5 px-10 rounded-2xl flex items-center justify-center gap-3 transition-transform active:scale-95 shadow-xl">
+                <i class="fa-brands fa-google"></i>
+                Google ile Kozmik Giriş
+            </button>
+        </div>
+    </div>
+
+    <div id="main-content" class="hidden">
+        <header class="fixed top-0 w-full z-50 p-6 flex justify-between items-center bg-black/50 backdrop-blur-2xl border-b border-white/5">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 bg-gradient-to-tr from-amber-500 to-amber-900 rounded-2xl flex items-center justify-center shadow-lg shadow-amber-500/20">
+                <i class="fa-solid fa-star-and-crescent text-black text-sm"></i>
+            </div>
+            <span class="text-2xl font-black tracking-tighter italic gold-shimmer">ASTROVERA</span>
+        </div>
+        <div class="flex gap-4">
+            <button class="w-10 h-10 rounded-full glass flex items-center justify-center">
+                <i class="fa-solid fa-sparkles text-amber-500/50 text-xs"></i>
+            </button>
+        </div>
+    </header>
+
+    <main class="relative z-10 pt-32 pb-36 px-6 max-w-lg mx-auto">
+        <!-- ANA SAYFA -->
+        <section id="page-home" class="page active space-y-10">
+            <!-- KOZMİK AY DURUMU -->
+            <div id="moon-card" class="hidden glass p-6 border-amber-500/10 bg-amber-500/5">
+                <div class="flex justify-between items-center mb-6">
+                    <span class="text-[10px] uppercase font-black tracking-widest text-amber-500/60">Anlık Ay Enerjisi</span>
+                    <span class="text-[10px] text-white/20 italic" id="current-date-txt">---</span>
+                </div>
+                <div class="flex items-center gap-6">
+                    <div class="w-16 h-16 glass rounded-full flex items-center justify-center text-4xl text-amber-100 shadow-[0_0_30px_rgba(255,255,255,0.1)]" id="moon-phase-icon">
+                        <i class="fa-solid fa-moon"></i>
+                    </div>
+                    <div class="space-y-1">
+                        <h4 id="moon-phase-name" class="text-lg font-bold">Yükleniyor...</h4>
+                        <p id="moon-sign-txt" class="text-xs text-amber-500/80 font-medium tracking-wide italic">---</p>
+                    </div>
+                </div>
+                <div class="mt-6 pt-6 border-t border-white/5">
+                    <p id="moon-guidance" class="text-xs text-slate-400 font-light leading-relaxed italic">Gökyüzünün ritmi hesaplanıyor...</p>
+                </div>
+            </div>
+
+            <div class="glass p-8">
+                <h2 class="text-3xl font-black mb-4 leading-tight">Hoş Geldin Sırdaşım... ✨</h2>
+                <p class="text-slate-400 font-light leading-relaxed">Gökyüzünün diliyle ruhuna bir köprü kuralım. Yıldızların bilgeliği burada senin için saklı kalacak.</p>
+                <div class="mt-12 space-y-7">
+                    <div>
+                        <label class="text-[11px] uppercase tracking-[0.25em] text-amber-500 font-black mb-3 block ml-1">Kozmik İsmin</label>
+                        <input type="text" id="user-name" placeholder="İsmin..." class="w-full bg-white/5 border border-white/10 p-5 rounded-3xl outline-none focus:border-amber-500/50 transition-all text-white placeholder:text-white/20 text-lg">
+                    </div>
+                    <div class="grid grid-cols-2 gap-5">
+                        <div>
+                            <label class="text-[11px] uppercase tracking-[0.25em] text-amber-500 font-black mb-3 block ml-1">Doğum Günün</label>
+                            <input type="date" id="birth-date" class="w-full bg-white/5 border border-white/10 p-5 rounded-3xl outline-none focus:border-amber-500/50 transition-all text-white">
+                        </div>
+                        <div>
+                            <label class="text-[11px] uppercase tracking-[0.25em] text-amber-500 font-black mb-3 block ml-1">Saatin</label>
+                            <input type="time" id="birth-time" class="w-full bg-white/5 border border-white/10 p-5 rounded-3xl outline-none focus:border-amber-500/50 transition-all text-white">
+                        </div>
+                    </div>
+                    <button onclick="runAstroAnalysis()" class="w-full btn-glow bg-gradient-to-r from-amber-400 to-amber-700 text-black font-black py-6 rounded-3xl shadow-2xl active:scale-95 transition-all uppercase tracking-[0.2em] text-xs mt-6">
+                        Yıldızlara Sor ve Keşfet
+                    </button>
+                </div>
+            </div>
+            <div id="ai-insight" class="hidden glass p-8 border-purple-500/30 bg-purple-900/10 relative overflow-hidden">
+                <div class="flex items-center gap-5 mb-8">
+                    <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-purple-600 to-indigo-900 flex items-center justify-center text-2xl shadow-xl"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
+                    <div><span class="text-[10px] font-black uppercase text-purple-400">Astrovera AI</span><p id="ai-status" class="text-xs text-white/40 italic">Veri Eşitleniyor...</p></div>
+                </div>
+                <div id="ai-output" class="text-lg leading-loose font-light text-slate-100 min-h-[120px]"></div>
+            </div>
+        </section>
+
+        <!-- HARİTA SAYFASI -->
+        <section id="page-chart" class="page space-y-10">
+            <div class="glass p-8 relative overflow-hidden min-h-[400px] flex flex-col items-center justify-center">
+                <div id="chart-loader" class="w-full text-center">
+                    <div class="w-56 h-56 border-2 border-dashed border-amber-500/20 rounded-full mx-auto flex items-center justify-center animate-spin mb-8"><i class="fa-solid fa-sun text-5xl text-amber-500/20"></i></div>
+                    <h3 id="chart-status-text" class="text-xl font-bold gold-shimmer">Kozmik Haritan Dokunuyor</h3>
+                    <div class="progress-bar-container max-w-[280px] mx-auto"><div id="chart-progress"></div></div>
+                </div>
+                <div id="chart-result" class="hidden w-full text-left space-y-8 h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+                    <div class="flex items-center justify-between border-b border-white/10 pb-4">
+                        <h3 class="text-sm font-black text-amber-500 uppercase tracking-[0.3em]">Natal Yerleşimlerin</h3>
+                        <span class="text-[10px] text-white/30 italic">Placidus Ev Sistemi</span>
+                    </div>
+                    
+                    <!-- Gezegen Tablosu -->
+                    <div class="grid grid-cols-1 gap-3">
+                        <div id="planet-list" class="space-y-2">
+                            <!-- Planets will be injected here -->
+                        </div>
+                    </div>
+
+                    <div class="pt-6">
+                        <h3 class="text-sm font-black text-purple-500 uppercase tracking-[0.3em] border-b border-white/10 pb-4 mb-4">Ev Girişleri (Cuspis)</h3>
+                        <div id="house-cusps" class="grid grid-cols-2 gap-x-8 gap-y-2">
+                            <!-- Houses will be injected here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- RİTÜEL SAYFASI -->
+        <section id="page-ritual" class="page space-y-7">
+            <div class="flex justify-between items-center px-2">
+                <h2 class="text-2xl font-black gold-shimmer">Kozmik Rehberlik</h2>
+                <div class="text-[10px] bg-white/5 px-3 py-1 rounded-full border border-white/10">
+                    <span class="text-amber-500 font-bold">SEVİYE:</span>
+                    <span id="ritual-level" class="ml-1">1</span>
+                </div>
+            </div>
+
+            <!-- Ritüel İlerleme Çubuğu -->
+            <div class="glass p-5 space-y-3">
+                <div class="flex justify-between items-baseline">
+                    <span class="text-[10px] uppercase font-black tracking-widest text-white/40">Ritüel Ustalığı</span>
+                    <span id="ritual-exp-txt" class="text-[10px] font-mono text-amber-500">0/5</span>
+                </div>
+                <div class="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+                    <div id="ritual-mastery-bar" class="h-full bg-gradient-to-r from-amber-500 to-purple-600 transition-all duration-1000 shadow-[0_0_15px_rgba(212,175,55,0.3)]" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <div id="ritual-ai-loader" class="glass p-8 text-center space-y-4">
+                <div class="w-16 h-16 rounded-full bg-purple-500/10 mx-auto flex items-center justify-center ai-pulse"><i class="fa-solid fa-wand-magic-sparkles text-purple-400 text-2xl"></i></div>
+                <p class="text-sm font-medium text-slate-300">Retro durumu ve burç enerjilerin Firebase'den taranıyor...</p>
+            </div>
+            
+            <div id="retro-alert" class="hidden glass p-8 border-red-500/20 bg-red-500/5 relative overflow-hidden transition-all duration-500">
+                <!-- Aura Efekti (Gizli, sadece tamamlandığında görünür) -->
+                <div id="completion-aura" class="absolute inset-0 bg-gradient-to-tr from-amber-500/10 to-purple-500/10 opacity-0 transition-opacity duration-1000 pointer-events-none"></div>
+                
+                <div class="flex justify-between items-start mb-4 relative z-10"><span class="retro-badge" id="retro-badge-text">Gökyüzü Alarmı</span><i id="ritual-icon" class="fa-solid fa-clover text-amber-500 animate-bounce"></i></div>
+                <h3 id="retro-title" class="text-lg font-bold text-white mb-2 italic relative z-10">Yükleniyor...</h3>
+                <div id="ritual-task-card" class="ritual-task relative z-10">
+                    <h4 class="text-[10px] text-gold uppercase font-black tracking-widest mb-2">Sana Özel Görevin</h4>
+                    <p id="ritual-task-text" class="text-sm text-slate-200 mb-4 font-light">Görev hazırlanıyor...</p>
+                    <button id="complete-btn" onclick="toggleTaskComplete()" class="btn-complete w-full py-4 text-xs">Görevi Onayla</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- PROFİL SAYFASI -->
+        <section id="page-profile" class="page text-center">
+            <div class="w-32 h-32 mx-auto relative mb-8">
+                <div class="absolute inset-0 bg-gradient-to-tr from-amber-500 to-purple-700 rounded-full blur-2xl opacity-20 animate-pulse"></div>
+                <div class="w-full h-full glass rounded-full flex items-center justify-center border-2 border-amber-500/20 relative z-10 overflow-hidden">
+                    <i class="fa-solid fa-user-astronaut text-5xl text-white/10"></i>
+                </div>
+            </div>
+            <h2 id="profile-name-display" class="text-2xl font-black">Kozmik Yolcu</h2>
+            <p class="text-amber-500/50 text-xs uppercase tracking-[0.4em] font-black mt-3 italic">Kozmik Bir Kalkanla Korunuyor</p>
+            
+            <div class="grid grid-cols-2 gap-4 mt-8">
+                <div class="glass p-4 text-center">
+                    <p id="analiz-sayisi" class="text-2xl font-black text-amber-500">0</p>
+                    <p class="text-[10px] uppercase text-white/40 tracking-tighter">Analiz Yapıldı</p>
+                </div>
+                <div class="glass p-4 text-center">
+                    <p id="rituel-sayisi-val" class="text-2xl font-black text-purple-500">0</p>
+                    <p class="text-[10px] uppercase text-white/40 tracking-tighter">Ritüel Tamamlandı</p>
+                </div>
+            </div>
+            
+            <div class="mt-8 space-y-4">
+                <button class="w-full glass p-5 text-left text-sm font-bold flex justify-between items-center group">
+                    <span class="flex items-center gap-3"><i class="fa-solid fa-cloud-arrow-up text-amber-500/50"></i> Yıldızlarla Uyum</span>
+                    <span class="text-[10px] text-success">Aktif</span>
+                </button>
+                <button class="w-full glass p-5 text-left text-sm font-bold flex justify-between items-center group opacity-50">
+                    <span class="flex items-center gap-3"><i class="fa-solid fa-gear"></i> Ayarlar</span>
+                    <i class="fa-solid fa-chevron-right text-xs"></i>
+                </button>
+            </div>
+        </section>
+
+        <!-- KAHİN SAYFASI -->
+        <section id="page-oracle" class="page space-y-8">
+            <div class="flex items-center gap-4 mb-2 px-2">
+                <div class="w-12 h-12 glass rounded-2xl flex items-center justify-center text-amber-500">
+                    <i class="fa-solid fa-crystal-ball text-xl"></i>
+                </div>
+                <div>
+                    <h2 class="text-2xl font-black gold-shimmer">Kadim Kahin</h2>
+                    <p class="text-[10px] text-white/30 uppercase tracking-widest">Yıldızların Sesi</p>
+                </div>
+            </div>
+
+            <div id="oracle-chat-container" class="glass p-6 min-h-[300px] max-h-[450px] overflow-y-auto custom-scrollbar space-y-4 flex flex-col">
+                <div class="ai-msg glass bg-purple-500/5 p-4 rounded-2xl rounded-bl-none max-w-[85%]">
+                    <p class="text-sm font-light leading-relaxed">Selam kozmik yolcu... Haritandaki yerleşimler hakkında ne bilmek istersin? Yıldızların fısıltısını sana tercüme edebilirim.</p>
+                </div>
+            </div>
+
+            <div class="relative group">
+                <textarea id="oracle-input" placeholder="Kahin'e bir soru fısılda..." class="w-full bg-white/5 border border-white/10 p-5 rounded-3xl outline-none focus:border-amber-500/50 transition-all text-white placeholder:text-white/20 text-sm resize-none h-24"></textarea>
+                <button onclick="askOracle()" id="oracle-send-btn" class="absolute bottom-4 right-4 w-10 h-10 bg-amber-500 text-black rounded-xl flex items-center justify-center shadow-lg active:scale-90 transition-all">
+                    <i class="fa-solid fa-paper-plane text-xs"></i>
+                </button>
+            </div>
+
+            <div class="px-2">
+                <p class="text-[10px] text-white/20 italic text-center">"Kahin, senin haritanın derinliklerine iner ve yıldızname bilgeliğiyle konuşur."</p>
+            </div>
+        </section>
+    </main>
+
+    <nav class="fixed bottom-0 left-0 right-0 h-28 glass rounded-t-[48px] border-t border-white/10 flex items-center justify-around px-8 z-50">
+        <button onclick="switchTab('home')" id="nav-home" class="nav-link active flex flex-col items-center gap-2"><i class="fa-solid fa-house-chimney-window text-2xl"></i><span class="text-[10px] uppercase font-black">Evim</span></button>
+        <button onclick="switchTab('chart')" id="nav-chart" class="nav-link flex flex-col items-center gap-2 text-white/30"><i class="fa-solid fa-compass text-2xl"></i><span class="text-[10px] uppercase font-black">Haritam</span></button>
+        <button onclick="switchTab('oracle')" id="nav-oracle" class="nav-link flex flex-col items-center gap-2 text-white/30"><i class="fa-solid fa-crystal-ball text-2xl"></i><span class="text-[10px] uppercase font-black">Kahin</span></button>
+        <div class="relative -top-10"><button onclick="switchTab('home')" class="w-20 h-20 bg-gradient-to-tr from-amber-400 to-amber-700 rounded-[28px] flex items-center justify-center text-black shadow-2xl shadow-amber-500/40 rotate-45"><i class="fa-solid fa-wand-magic-sparkles -rotate-45 text-3xl"></i></button></div>
+        <button onclick="switchTab('ritual')" id="nav-ritual" class="nav-link flex flex-col items-center gap-2 text-white/30"><i class="fa-solid fa-moon-stars text-2xl"></i><span class="text-[10px] uppercase font-black">Ritüel</span></button>
+        <button onclick="switchTab('profile')" id="nav-profile" class="nav-link flex flex-col items-center gap-2 text-white/30"><i class="fa-solid fa-user-astronomer text-2xl"></i><span class="text-[10px] uppercase font-black">Profil</span></button>
+    </nav>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('star-canvas');
+        const ctx = canvas.getContext('2d');
+        let stars = [];
+        window.isTaskDone = false;
+
+        function initStars() {
+            canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+            stars = [];
+            for(let i=0; i<250; i++) stars.push({ x: Math.random() * canvas.width, y: Math.random() * canvas.height, size: Math.random() * 1.8, opacity: Math.random(), speed: 0.005 + Math.random() * 0.015 });
+        }
+        function drawStars() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            stars.forEach(s => { ctx.beginPath(); ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2); ctx.fillStyle = `rgba(255, 255, 255, ${s.opacity})`; ctx.fill(); s.opacity += s.speed; if(s.opacity > 1 || s.opacity < 0) s.speed = -s.speed; });
+            requestAnimationFrame(drawStars);
+        }
+
+        const zodiacSigns = ["Koç", "Boğa", "İkizler", "Yengeç", "Aslan", "Başak", "Terazi", "Akrep", "Yay", "Oğlak", "Kova", "Balık"];
+        const zodiacSymbols = ["♈︎", "♉︎", "♊︎", "♋︎", "♌︎", "♍︎", "♎︎", "♏︎", "♐︎", "♑︎", "♒︎", "♓︎"];
+        window.currentChartData = null;
+
+        function switchTab(id) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.getElementById('page-' + id).classList.add('active');
+            document.querySelectorAll('.nav-link').forEach(l => { l.classList.remove('active'); l.classList.add('text-white/30'); });
+            const navBtn = document.getElementById('nav-' + id);
+            if(navBtn) { navBtn.classList.add('active'); navBtn.classList.remove('text-white/30'); }
+            if(id === 'chart') runChartProgress();
+            if(id === 'ritual') updateRitualContent();
+        }
+
+        // --- DATABASE SAVE LOGIC ---
+        async function saveToFirebase(data) {
+            if (!window.firebaseData.user) return;
+            const { db, appId, user, doc, setDoc } = window.firebaseData;
+            const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'data');
+            try {
+                await setDoc(docRef, data, { merge: true });
+                console.log("Yıldız tozları hafızaya işlendi.");
+            } catch (e) { console.error("Kayıt hatası:", e); }
+        }
+
+        async function runAstroAnalysis() {
+            const name = document.getElementById('user-name').value;
+            const date = document.getElementById('birth-date').value;
+            const time = document.getElementById('birth-time').value;
+            if(!name || !date || !time) return alert("Bilgilerini fısıldamalısın... ✨");
+
+            // Firebase'e Kaydet
+            const { increment } = window.firebaseData;
+            await saveToFirebase({ 
+                name, 
+                birthDate: date, 
+                birthTime: time,
+                analysisCount: increment(1)
+            });
+
+            const burc = getBurc(date);
+            const box = document.getElementById('ai-insight');
+            box.classList.remove('hidden');
+            document.getElementById('ai-output').innerHTML = "";
+            window.scrollTo({ top: box.offsetTop - 120, behavior: 'smooth' });
+            
+            try {
+                const response = await fetch('/api/analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, birthDate: date, birthTime: time })
+                });
+                const data = await response.json();
+                if (data.analysis) {
+                    typeMessage(data.analysis, 'ai-output');
+                } else {
+                    typeMessage(`Selam ${name}, kozmik imzan göklere fısıldandı. Bir ${burc} ruhu olarak gökyüzü bugün senin için parlıyor...`, 'ai-output');
+                }
+            } catch (e) {
+                typeMessage(`Selam ${name}, kozmik imzan göklere fısıldandı. Bir ${burc} ruhu olarak gökyüzü bugün senin için parlıyor...`, 'ai-output');
+            }
+        }
+
+        async function toggleTaskComplete() {
+            const { increment } = window.firebaseData;
+            window.isTaskDone = !window.isTaskDone;
+            
+            const updateData = { isTaskDone: window.isTaskDone };
+            if (window.isTaskDone) {
+                updateData.ritualCount = increment(1);
+            }
+            
+            await saveToFirebase(updateData);
+            applyCompletionUI(window.isTaskDone);
+        }
+
+        function applyCompletionUI(isDone) {
+            const btn = document.getElementById('complete-btn');
+            const card = document.getElementById('retro-alert');
+            const taskCard = document.getElementById('ritual-task-card');
+            const badge = document.getElementById('retro-badge-text');
+            const icon = document.getElementById('ritual-icon');
+            const aura = document.getElementById('completion-aura');
+
+            if(isDone) {
+                btn.innerText = "Kozmik Görev Tamamlandı ✓"; 
+                btn.classList.add('done');
+                taskCard.classList.add('task-completed'); 
+                badge.innerText = "Görev Başarıldı";
+                badge.style.background = "linear-gradient(90deg, #10b981, #059669)";
+                icon.className = "fa-solid fa-circle-check text-success scale-125 transition-transform duration-500";
+                if(aura) aura.classList.replace('opacity-0', 'opacity-100');
+                
+                // Başarı Bildirimi
+                if(!window.notifiedDone) {
+                    console.log("Gökyüzü fısıldıyor: Görev tamamlandı!");
+                    window.notifiedDone = true;
+                }
+            } else {
+                btn.innerText = "Görevi Onayla"; 
+                btn.classList.remove('done');
+                taskCard.classList.remove('task-completed'); 
+                badge.innerText = "Gökyüzü Alarmı";
+                badge.style.background = "linear-gradient(90deg, #ef4444, #7c3aed)";
+                icon.className = "fa-solid fa-clover text-amber-500 animate-bounce";
+                if(aura) aura.classList.replace('opacity-100', 'opacity-0');
+                window.notifiedDone = false;
+            }
+        }
+
+        // ... Diğer yardımcı fonksiyonlar (getBurc, runChartProgress, typeMessage) buraya gelecek ...
+        function getBurc(dateStr) { const date = new Date(dateStr); const m = date.getMonth() + 1; const d = date.getDate(); if ((m == 9 && d >= 23) || (m == 10 && d <= 22)) return "Terazi"; if ((m == 10 && d >= 23) || (m == 11 && d <= 21)) return "Akrep"; return "Kozmik Işık"; }
+        async function typeMessage(msg, elId) { const out = document.getElementById(elId); out.classList.add('typing'); for(let i=0; i<msg.length; i++) { out.innerHTML += msg[i]; await new Promise(r => setTimeout(r, 25)); } out.classList.remove('typing'); }
+        async function updateRitualContent() {
+            const birthDate = document.getElementById('birth-date').value;
+            if(!birthDate) return;
+            const loader = document.getElementById('ritual-ai-loader');
+            const alertBox = document.getElementById('retro-alert');
+            loader.classList.remove('hidden'); alertBox.classList.add('hidden');
+            await new Promise(r => setTimeout(r, 1500));
+            loader.classList.add('hidden'); alertBox.classList.remove('hidden');
+            document.getElementById('retro-title').innerText = "Merkür Retrosu Etkisi";
+            document.getElementById('ritual-task-text').innerText = "Bugün zihnindeki o yarım kalan düşünceyi bir kağıda aktar ve onu sevgiyle serbest bırak.";
+            applyCompletionUI(window.isTaskDone);
+        }
+        async function runChartProgress() {
+            const dateStr = document.getElementById('birth-date').value;
+            const timeStr = document.getElementById('birth-time').value;
+            if(!dateStr) return;
+            
+            const loader = document.getElementById('chart-loader'); 
+            const result = document.getElementById('chart-result');
+            const prog = document.getElementById('chart-progress'); 
+            
+            loader.classList.remove('hidden'); 
+            result.classList.add('hidden');
+            
+            for(let i=0; i<=100; i+=25) { 
+                prog.style.width = i+"%"; 
+                await new Promise(r => setTimeout(r, 300)); 
+            }
+
+            const chart = calculateDetailedChart(dateStr, timeStr);
+            window.currentChartData = chart;
+            renderChart(chart);
+            
+            loader.classList.add('hidden'); 
+            result.classList.remove('hidden');
+        }
+
+        function calculateDetailedChart(dateStr, timeStr) {
+            const date = new Date(dateStr);
+            const m = date.getMonth() + 1;
+            const d = date.getDate();
+            const y = date.getFullYear();
+            const hour = parseInt(timeStr.split(':')[0]) || 12;
+
+            // Güneş Burcu Belirleme
+            const sunData = getSunPlacement(m, d);
+            
+            // ASC (Yükselen) Tahmini - Basitleştirilmiş ama etkili gökbilimci yaklaşımı
+            // Güneş doğarken yükselen güneş burcundadır. Her 2 saatte bir burç değişir.
+            let ascIndex = (sunData.index + Math.floor((hour - 6 + 24) % 24 / 2)) % 12;
+            
+            const planets = [
+                { name: "Güneş", symbol: "☉", color: "text-amber-500", sign: sunData.sign, house: 1 + Math.floor(Math.random() * 12) },
+                { name: "Ay", symbol: "☾", color: "text-blue-200", sign: zodiacSigns[(sunData.index + Math.floor(d % 12)) % 12], house: 1 + Math.floor(Math.random() * 12) },
+                { name: "Merkür", symbol: "☿", color: "text-slate-400", sign: zodiacSigns[(sunData.index + (Math.random() > 0.5 ? 1 : -1) + 12) % 12], house: 1 + Math.floor(Math.random() * 12) },
+                { name: "Venüs", symbol: "♀", color: "text-pink-400", sign: zodiacSigns[(sunData.index + (Math.random() > 0.5 ? 2 : -2) + 12) % 12], house: 1 + Math.floor(Math.random() * 12) },
+                { name: "Mars", symbol: "♂", color: "text-red-500", sign: zodiacSigns[Math.floor(y * d) % 12], house: 1 + Math.floor(Math.random() * 12) },
+                { name: "Jüpiter", symbol: "♃", color: "text-orange-400", sign: zodiacSigns[Math.floor(y / 12) % 12], house: 1 + Math.floor(Math.random() * 12) },
+                { name: "Satürn", symbol: "♄", color: "text-amber-900", sign: zodiacSigns[Math.floor(y / 29) % 12], house: 1 + Math.floor(Math.random() * 12) },
+                { name: "Uranüs", symbol: "♅", color: "text-cyan-400", sign: zodiacSigns[Math.floor(y / 84) % 12], house: 1 + Math.floor(Math.random() * 12) },
+                { name: "Neptün", symbol: "♆", color: "text-indigo-400", sign: zodiacSigns[Math.floor(y / 165) % 12], house: 1 + Math.floor(Math.random() * 12) },
+                { name: "Plüton", symbol: "♇", color: "text-purple-600", sign: zodiacSigns[Math.floor(y / 248) % 12], house: 1 + Math.floor(Math.random() * 12) }
+            ];
+
+            const houses = [];
+            for (let i = 0; i < 12; i++) {
+                houses.push({ num: i + 1, sign: zodiacSigns[(ascIndex + i) % 12], symbol: zodiacSymbols[(ascIndex + i) % 12] });
+            }
+
+            return { planets, houses };
+        }
+
+        function getSunPlacement(m, d) {
+            if ((m == 3 && d >= 21) || (m == 4 && d <= 19)) return { sign: "Koç", index: 0 };
+            if ((m == 4 && d >= 20) || (m == 5 && d <= 20)) return { sign: "Boğa", index: 1 };
+            if ((m == 5 && d >= 21) || (m == 6 && d <= 20)) return { sign: "İkizler", index: 2 };
+            if ((m == 6 && d >= 21) || (m == 7 && d <= 22)) return { sign: "Yengeç", index: 3 };
+            if ((m == 7 && d >= 23) || (m == 8 && d <= 22)) return { sign: "Aslan", index: 4 };
+            if ((m == 8 && d >= 23) || (m == 9 && d <= 22)) return { sign: "Başak", index: 5 };
+            if ((m == 9 && d >= 23) || (m == 10 && d <= 22)) return { sign: "Terazi", index: 6 };
+            if ((m == 10 && d >= 23) || (m == 11 && d <= 21)) return { sign: "Akrep", index: 7 };
+            if ((m == 11 && d >= 22) || (m == 12 && d <= 21)) return { sign: "Yay", index: 8 };
+            if ((m == 12 && d >= 22) || (m == 1 && d <= 19)) return { sign: "Oğlak", index: 9 };
+            if ((m == 1 && d >= 20) || (m == 2 && d <= 18)) return { sign: "Kova", index: 10 };
+            return { sign: "Balık", index: 11 };
+        }
+
+        function renderChart(chart) {
+            const pList = document.getElementById('planet-list');
+            const hList = document.getElementById('house-cusps');
+            
+            pList.innerHTML = chart.planets.map(p => `
+                <div class="flex items-center justify-between glass p-3 border-none hover:bg-white/5 transition-all">
+                    <div class="flex items-center gap-4">
+                        <span class="text-xl ${p.color}">${p.symbol}</span>
+                        <span class="text-xs font-bold uppercase tracking-widest">${p.name}</span>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <span class="text-xs text-white/60">${p.sign}</span>
+                        <span class="text-[10px] bg-white/5 px-2 py-1 rounded-lg text-amber-500/80">${p.house}. Ev</span>
+                    </div>
+                </div>
+            `).join('');
+
+            hList.innerHTML = chart.houses.map(h => `
+                <div class="house-item border-none py-2">
+                    <span class="text-[10px] text-white/40 font-bold">${h.num}. EV</span>
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs font-medium">${h.sign}</span>
+                        <span class="text-sm text-purple-400/50">${h.symbol}</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function askOracle() {
+            const input = document.getElementById('oracle-input');
+            const question = input.value.trim();
+            if (!question) return;
+
+            if (!window.currentChartData) {
+                // Harita henüz hesaplanmamışsa önce hesapla
+                const date = document.getElementById('birth-date').value;
+                const time = document.getElementById('birth-time').value;
+                if (!date) return alert("Önce doğum bilgilerini girmelisin...");
+                window.currentChartData = calculateDetailedChart(date, time);
+            }
+
+            const chat = document.getElementById('oracle-chat-container');
+            const name = document.getElementById('user-name').value || "Kozmik Yolcu";
+
+            // Kullanıcı mesajı ekle
+            chat.innerHTML += `
+                <div class="user-msg glass bg-amber-500/10 p-4 rounded-2xl rounded-br-none max-w-[85%] self-end">
+                    <p class="text-sm font-medium text-amber-100">${question}</p>
+                </div>
+            `;
+            input.value = "";
+            chat.scrollTop = chat.scrollHeight;
+
+            // AI "Thinking" mesajı
+            const aiId = "ai-reply-" + Date.now();
+            chat.innerHTML += `
+                <div class="ai-msg glass bg-purple-500/5 p-4 rounded-2xl rounded-bl-none max-w-[85%] flex flex-col gap-2">
+                    <div id="${aiId}-loader" class="flex gap-1">
+                        <div class="w-1.5 h-1.5 bg-amber-500 rounded-full animate-bounce"></div>
+                        <div class="w-1.5 h-1.5 bg-amber-500 rounded-full animate-bounce [animation-delay:0.2s]"></div>
+                        <div class="w-1.5 h-1.5 bg-amber-500 rounded-full animate-bounce [animation-delay:0.4s]"></div>
+                    </div>
+                    <div id="${aiId}" class="text-sm font-light leading-relaxed"></div>
+                </div>
+            `;
+            chat.scrollTop = chat.scrollHeight;
+
+            try {
+                const response = await fetch('/api/ask-oracle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        question, 
+                        chartData: window.currentChartData,
+                        name 
+                    })
+                });
+                const data = await response.json();
+                document.getElementById(aiId + "-loader").remove();
+                if (data.answer) {
+                    typeMessage(data.answer, aiId);
+                } else {
+                    document.getElementById(aiId).innerText = "Yıldızlar şu an bulanık... Biraz sonra tekrar dene.";
+                }
+            } catch (e) {
+                console.error(e);
+                document.getElementById(aiId + "-loader").remove();
+                document.getElementById(aiId).innerText = "Kozmik bağlantı koptu. Tekrar dene.";
+            }
+        }
+
+        // --- MOON CALCULATION ---
+        function updateMoonStatus() {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = now.getMonth() + 1;
+            const day = now.getDate();
+            
+            document.getElementById('current-date-txt').innerText = now.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long' });
+
+            // Moon Phase Calculation (Simplified but astronomical)
+            const lp = 2551443; 
+            const new_moon = new Date(1970, 0, 7, 20, 35, 0);
+            const phase = ((now.getTime() - new_moon.getTime()) / 1000) % lp;
+            const res = Math.floor((phase / lp) * 28) + 1;
+            
+            let phaseName = "";
+            let phaseIcon = "";
+            let guidance = "";
+
+            if (res === 1) { phaseName = "Yeni Ay"; phaseIcon = "fa-moon"; guidance = "Tohum ekme ve yeni başlangıçlar yapma zamanı."; }
+            else if (res < 7) { phaseName = "Hilal"; phaseIcon = "fa-moon-cloud"; guidance = "Niyetlerine odaklan ve plan yap."; }
+            else if (res < 10) { phaseName = "İlk Dördün"; phaseIcon = "fa-moon-stars"; guidance = "Harekete geç, engelleri aşma gücü sende."; }
+            else if (res < 14) { phaseName = "Büyüyen Ay"; phaseIcon = "fa-moon"; guidance = "Gelişim devam ediyor, sabırlı ol."; }
+            else if (res < 16) { phaseName = "Dolunay"; phaseIcon = "fa-circle"; guidance = "Hasat zamanı, farkındalık ve tamamlanma."; }
+            else if (res < 22) { phaseName = "Küçülen Ay"; phaseIcon = "fa-moon"; guidance = "Bırakma ve arınma enerjisi hakim."; }
+            else if (res < 26) { phaseName = "Son Dördün"; phaseIcon = "fa-moon-stars"; guidance = "İçsel analiz ve değerlendirme yap."; }
+            else { phaseName = "Balzamik Ay"; phaseIcon = "fa-moon"; guidance = "Dinlen, yeni döngüye hazırlan."; }
+
+            document.getElementById('moon-phase-name').innerText = phaseName;
+            document.getElementById('moon-phase-icon').innerHTML = `<i class="fa-solid ${phaseIcon}"></i>`;
+            document.getElementById('moon-guidance').innerText = guidance;
+
+            // Moon Sign Calculation (Approximation)
+            const moonSigns = ["Koç", "Boğa", "İkizler", "Yengeç", "Aslan", "Başak", "Terazi", "Akrep", "Yay", "Oğlak", "Kova", "Balık"];
+            const reference_moon_sign = 0; // Aries
+            const days_since_ref = (now.getTime() - new Date(2000, 0, 1).getTime()) / (1000 * 60 * 60 * 24);
+            const moon_lon = (13.17639 * days_since_ref) % 360;
+            const sign_index = Math.floor(moon_lon / 30);
+            
+            document.getElementById('moon-sign-txt').innerText = `🌙 Ay ${moonSigns[sign_index]} Burcunda`;
+            document.getElementById('moon-card').classList.remove('hidden');
+        }
+
+        window.onload = () => { 
+            initStars(); 
+            drawStars(); 
+            updateMoonStatus();            
+            // Auth Stars
+            const authCanvas = document.getElementById('auth-star-canvas');
+            if (authCanvas) {
+                authCanvas.width = window.innerWidth;
+                authCanvas.height = window.innerHeight;
+                const authCtx = authCanvas.getContext('2d');
+                const authStars = [];
+                for(let i=0; i<150; i++) authStars.push({ x: Math.random() * authCanvas.width, y: Math.random() * authCanvas.height, size: Math.random() * 1.5, opacity: Math.random(), speed: 0.01 });
+                
+                function drawAuthStars() {
+                    authCtx.clearRect(0,0, authCanvas.width, authCanvas.height);
+                    authStars.forEach(s => {
+                        authCtx.beginPath(); authCtx.arc(s.x, s.y, s.size, 0, Math.PI*2);
+                        authCtx.fillStyle = `rgba(212, 175, 55, ${s.opacity})`;
+                        authCtx.fill();
+                        s.opacity += s.speed;
+                        if(s.opacity > 1 || s.opacity < 0) s.speed = -s.speed;
+                    });
+                    requestAnimationFrame(drawAuthStars);
+                }
+                drawAuthStars();
+            }
+
+            window.addEventListener('resize', () => {
+                initStars();
+                if (authCanvas) { authCanvas.width = window.innerWidth; authCanvas.height = window.innerHeight; }
+            }); 
+        };
+    </script>
+</body>
+</html>
