@@ -62,12 +62,31 @@
 
                 // Auth initialization
                 window.loginWithGoogle = async () => {
+                    const auth = window.firebaseData.auth;
+                    if (!auth) {
+                        alert("Kozmik bağlantı henüz hazır değil. Lütfen sayfayı yenileyip tekrar deneyin.");
+                        return;
+                    }
+
                     try {
-                        const result = await signInWithPopup(window.firebaseData.auth, provider);
-                        console.log("Giriş yapıldı:", result.user.displayName);
+                        console.log("Firebase Auth başlatılıyor (Popup)...");
+                        const result = await signInWithPopup(auth, provider);
+                        console.log("Giriş başarılı:", result.user.displayName);
                     } catch (e) {
-                        console.error("Giriş hatası:", e);
-                        alert("Giriş yapılamadı. Lütfen tekrar deneyin.");
+                        console.error("Giriş sırasında hata oluştu:", e);
+                        const domain = window.location.hostname;
+                        
+                        if (e.code === 'auth/unauthorized-domain') {
+                            alert(`ALAN ADI YETKİSİ HATASI!\n\nŞu anki adres: ${domain}\n\nBu adres Firebase panelinde 'Authorized Domains' listesine eklenmemiş.\n\nÇözüm:\n1. Firebase Console > Authentication > Settings sekmesine gidin.\n2. 'Authorized Domains' (Yetkilendirilmiş Alan Adları) listesini bulun.\n3. Listeye '${domain}' adresini ekleyin.\n4. Ayrıca Vercel için '*.vercel.app' şeklinde bir kayıt eklemeniz önerilir.`);
+                        } else if (e.code === 'auth/operation-not-allowed') {
+                            alert("HATA: Google Girişi Devre Dışı!\n\nFirebase Console > Authentication > Sign-in Method kısmından Google seçeneğini aktif etmelisiniz.");
+                        } else if (e.code === 'auth/popup-closed-by-user') {
+                            console.log("Kullanıcı pencereyi kapattı.");
+                        } else if (e.code === 'auth/internal-error' || e.code === 'auth/invalid-api-key') {
+                            alert("YAPILANDIRMA HATASI!\n\nAPI Anahtarı veya Proje Kimliği hatalı görünüyor. Vercel Dashboard üzerinden Environment Variables (Çevresel Değişkenler) ayarlarınızı kontrol edin.");
+                        } else {
+                            alert(`Giriş İşlemi Başarısız!\n\nHata Kodu: ${e.code}\nMesaj: ${e.message}\n\nLütfen Firebase ayarlarınızın doğru olduğundan emin olun.`);
+                        }
                     }
                 };
 
@@ -77,16 +96,29 @@
                         console.log("Kozmik Bağlantı Aktif: ", user.uid);
                         listenToUserProfile(user.uid);
                         listenToStats();
-                        document.getElementById('auth-section').classList.add('hidden');
-                        document.getElementById('main-content').classList.remove('hidden');
+                        const authSec = document.getElementById('auth-section');
+                        const mainCont = document.getElementById('main-content');
+                        if (authSec) authSec.classList.add('hidden');
+                        if (mainCont) mainCont.classList.remove('hidden');
                     } else {
-                        document.getElementById('auth-section').classList.remove('hidden');
-                        document.getElementById('main-content').classList.add('hidden');
+                        const authSec = document.getElementById('auth-section');
+                        const mainCont = document.getElementById('main-content');
+                        if (authSec) authSec.classList.remove('hidden');
+                        if (mainCont) mainCont.classList.add('hidden');
                     }
                 });
             } catch (e) {
                 console.error("Firebase Başlatma Hatası:", e);
-                alert("Sistem yüklenirken bir sorun oluştu. Lütfen sayfayı yenileyin.");
+                const loader = document.getElementById('auth-loader');
+                if (loader) {
+                    loader.innerHTML = `
+                        <div class="flex flex-col items-center gap-4 text-center p-6">
+                            <i class="fa-solid fa-triangle-exclamation text-amber-500 text-3xl"></i>
+                            <p class="text-sm font-medium text-white">Yapılandırma Hatası</p>
+                            <p class="text-[10px] text-white/50 max-w-[200px]">Firebase ayarları eksik veya hatalı olabilir. Lütfen Vercel/Environment Variables kısmını kontrol edin.</p>
+                        </div>
+                    `;
+                }
             }
         }
 
@@ -220,7 +252,10 @@
             <span class="text-2xl font-black tracking-tighter italic gold-shimmer">ASTROVERA</span>
         </div>
         <div class="flex gap-4">
-            <button class="w-10 h-10 rounded-full glass flex items-center justify-center">
+            <button onclick="toggleGlossary()" class="w-10 h-10 rounded-full glass flex items-center justify-center hover:border-amber-500/50 transition-all" title="Kozmik Sözlük">
+                <i class="fa-solid fa-book-sparkles text-amber-500/80 text-xs"></i>
+            </button>
+            <button class="w-10 h-10 rounded-full glass flex items-center justify-center opacity-30 cursor-not-allowed">
                 <i class="fa-solid fa-sparkles text-amber-500/50 text-xs"></i>
             </button>
         </div>
@@ -437,6 +472,10 @@
             </div>
             
             <div class="mt-8 space-y-4">
+                <button onclick="toggleGlossary()" class="w-full glass p-5 text-left text-sm font-bold flex justify-between items-center group">
+                    <span class="flex items-center gap-3"><i class="fa-solid fa-book-sparkles text-amber-500/50"></i> Kozmik Sözlük</span>
+                    <i class="fa-solid fa-chevron-right text-xs text-white/20 group-hover:text-amber-500 transition-colors"></i>
+                </button>
                 <button class="w-full glass p-5 text-left text-sm font-bold flex justify-between items-center group">
                     <span class="flex items-center gap-3"><i class="fa-solid fa-cloud-arrow-up text-amber-500/50"></i> Yıldızlarla Uyum</span>
                     <span class="text-[10px] text-success">Aktif</span>
@@ -525,6 +564,69 @@
         <button onclick="switchTab('ritual')" id="nav-ritual" class="nav-link flex flex-col items-center gap-1.5 text-white/30"><i class="fa-solid fa-moon-stars text-xl"></i><span class="text-[9px] uppercase font-black">Ritüel</span></button>
         <button onclick="switchTab('profile')" id="nav-profile" class="nav-link flex flex-col items-center gap-1.5 text-white/30"><i class="fa-solid fa-user-astronomer text-xl"></i><span class="text-[9px] uppercase font-black">Profil</span></button>
     </nav>
+
+    <!-- KOZMİK SÖZLÜK MODALI -->
+    <div id="glossary-modal" class="hidden fixed inset-0 z-[100] bg-black/95 backdrop-blur-3xl p-6 flex flex-col items-center justify-start animate-fade-in custom-scrollbar overflow-y-auto">
+        <div class="w-full max-w-lg mx-auto py-12">
+            <button onclick="toggleGlossary()" class="absolute top-6 right-6 w-12 h-12 glass rounded-full flex items-center justify-center text-white/60 hover:text-white hover:bg-white/10 transition-all z-10">
+                <i class="fa-solid fa-xmark text-xl"></i>
+            </button>
+            
+            <div class="space-y-8 animate-slide-up">
+                <div class="flex flex-col items-center gap-4 mb-10">
+                    <div class="w-16 h-16 bg-amber-500/10 rounded-2xl flex items-center justify-center text-amber-500 border border-amber-500/20">
+                        <i class="fa-solid fa-book-sparkles text-3xl"></i>
+                    </div>
+                    <h2 class="text-3xl font-black gold-shimmer">Kozmik Sözlük</h2>
+                    <p class="text-[10px] text-white/40 uppercase tracking-[0.3em] font-black">Yıldızların Dilini Çöz</p>
+                </div>
+
+                <div class="space-y-4 text-left">
+                    <div class="glass p-6 border-white/5 hover:border-amber-500/20 transition-all group">
+                        <h4 class="text-amber-500 font-black text-sm uppercase tracking-widest mb-3 flex items-center gap-2">
+                            <i class="fa-solid fa-arrow-up-right"></i> Yükselen (Ascendant)
+                        </h4>
+                        <p class="text-xs font-light leading-relaxed text-slate-300">Kişiliğimizin dış dünyaya yansıyan yüzü ve hayata bakış açımızdır. Doğum anında doğu ufkunda yükselen burçtur.</p>
+                    </div>
+
+                    <div class="glass p-6 border-white/5 hover:border-amber-500/20 transition-all group">
+                        <h4 class="text-amber-500 font-black text-sm uppercase tracking-widest mb-3 flex items-center gap-2">
+                            <i class="fa-solid fa-rotate-left"></i> Retro (Retrograde)
+                        </h4>
+                        <p class="text-xs font-light leading-relaxed text-slate-300">Bir gezegenin dünyadan bakıldığında geri gidiyormuş gibi görünmesidir. O gezegenin temsil ettiği konularda içe dönüş, revizyon ve gecikmeler yaşanabilir.</p>
+                    </div>
+
+                    <div class="glass p-6 border-white/5 hover:border-amber-500/20 transition-all group">
+                        <h4 class="text-amber-500 font-black text-sm uppercase tracking-widest mb-3 flex items-center gap-2">
+                            <i class="fa-solid fa-layer-group"></i> Dekan (Decan)
+                        </h4>
+                        <p class="text-xs font-light leading-relaxed text-slate-300">Bir burcun 10'ar derecelik üç bölüme ayrılmasıdır. Her dekan, burcun farklı bir alt karakteristiğini ve yönetici gezegen etkisini vurgular.</p>
+                    </div>
+
+                    <div class="glass p-6 border-white/5 hover:border-amber-500/20 transition-all group">
+                        <h4 class="text-amber-500 font-black text-sm uppercase tracking-widest mb-3 flex items-center gap-2">
+                            <i class="fa-solid fa-house-chimney"></i> Evler (Houses)
+                        </h4>
+                        <p class="text-xs font-light leading-relaxed text-slate-300">Gökyüzünün 12 bölüme ayrılmasıdır. Her ev, hayatın farklı bir alanını (parasal konular, ilişkiler, kariyer vb.) temsil eder.</p>
+                    </div>
+
+                    <div class="glass p-6 border-white/5 hover:border-amber-500/20 transition-all group">
+                        <h4 class="text-amber-500 font-black text-sm uppercase tracking-widest mb-3 flex items-center gap-2">
+                            <i class="fa-solid fa-angles-up"></i> Açılar (Aspects)
+                        </h4>
+                        <p class="text-xs font-light leading-relaxed text-slate-300">Gezegenlerin birbirlerine göre yaptıkları geometrik açılardır. Bu açılar enerjilerin nasıl birleştiğini (uyumlu veya öğretici/zorlayıcı) gösterir.</p>
+                    </div>
+
+                    <div class="glass p-6 border-white/5 hover:border-amber-500/20 transition-all group">
+                        <h4 class="text-amber-500 font-black text-sm uppercase tracking-widest mb-3 flex items-center gap-2">
+                            <i class="fa-solid fa-moon"></i> Ay Burcu
+                        </h4>
+                        <p class="text-xs font-light leading-relaxed text-slate-300">Duygusal ihtiyaçlarımızı, iç dünyamızı ve nasıl tepki verdiğimizi temsil eder. Ruhun aynası ve en derin ihtiyaçlarımızı fısıldayan sesimizdir.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
     </div>
 
     <script>
@@ -595,6 +697,17 @@
             if (id === 'oracle') {
                 const chat = document.getElementById('oracle-chat-container');
                 if(chat) setTimeout(() => chat.scrollTop = chat.scrollHeight, 100);
+            }
+        }
+
+        function toggleGlossary() {
+            const modal = document.getElementById('glossary-modal');
+            if (modal.classList.contains('hidden')) {
+                modal.classList.remove('hidden');
+                document.body.style.overflow = 'hidden';
+            } else {
+                modal.classList.add('hidden');
+                document.body.style.overflow = '';
             }
         }
 
@@ -944,6 +1057,25 @@
                     btn.innerHTML = 'Yıldızlara Sor ve Keşfet';
                 }
             }
+        }
+
+        function getBurc(dateStr) {
+            const date = new Date(dateStr);
+            const m = date.getMonth() + 1;
+            const d = date.getDate();
+            if ((m == 3 && d >= 21) || (m == 4 && d <= 19)) return "Koç";
+            if ((m == 4 && d >= 20) || (m == 5 && d <= 20)) return "Boğa";
+            if ((m == 5 && d >= 21) || (m == 6 && d <= 20)) return "İkizler";
+            if ((m == 6 && d >= 21) || (m == 7 && d <= 22)) return "Yengeç";
+            if ((m == 7 && d >= 23) || (m == 8 && d <= 22)) return "Aslan";
+            if ((m == 8 && d >= 23) || (m == 9 && d <= 22)) return "Başak";
+            if ((m == 9 && d >= 23) || (m == 10 && d <= 22)) return "Terazi";
+            if ((m == 10 && d >= 23) || (m == 11 && d <= 21)) return "Akrep";
+            if ((m == 11 && d >= 22) || (m == 12 && d <= 21)) return "Yay";
+            if ((m == 12 && d >= 22) || (m == 1 && d <= 19)) return "Oğlak";
+            if ((m == 1 && d >= 20) || (m == 2 && d <= 18)) return "Kova";
+            if ((m == 2 && d >= 19) || (m == 3 && d <= 20)) return "Balık";
+            return "Kozmik Kaşif";
         }
 
         async function typeMessage(msg, elId) { 

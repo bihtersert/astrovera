@@ -2,7 +2,7 @@ import express from "express";
 import path from "path";
 import fs from "fs";
 import { createServer as createViteServer } from "vite";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -14,8 +14,15 @@ async function startServer() {
 
   app.use(express.json());
 
-  // Gemini AI entegrasyonu (Google AI SDK)
-  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+  // Gemini AI entegrasyonu (Google GenAI SDK - Modern Approach)
+  const ai = new GoogleGenAI({
+    apiKey: process.env.GEMINI_API_KEY || "",
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build',
+      }
+    }
+  });
 
   // API Routes
   app.get("/api/firebase-config", (req, res) => {
@@ -81,10 +88,11 @@ async function startServer() {
 
       prompt += ` Yanıtı Türkçe ver.`;
 
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-      res.json({ analysis: response.text() });
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: prompt
+      });
+      res.json({ analysis: response.text });
     } catch (error: any) {
       console.error("AI Error:", error);
       const errorMsg = error?.message || String(error);
@@ -106,21 +114,17 @@ async function startServer() {
       ${moodText}
       Görevin kullanıcının sorusuna derin, mistik ve astrolojik temelli bir yanıt vermektir.`;
 
-      const model = genAI.getGenerativeModel({ 
-        model: "gemini-1.5-flash",
-        systemInstruction: systemPrompt
-      });
-
-      const chat = model.startChat({
+      const chat = ai.chats.create({
+        model: "gemini-3-flash-preview",
+        config: { systemInstruction: systemPrompt },
         history: history ? history.map((h: any) => ({
           role: h.role === 'model' ? 'model' : 'user',
           parts: [{ text: h.parts[0].text }]
         })).slice(-10) : [],
       });
 
-      const result = await chat.sendMessage(question);
-      const response = await result.response;
-      res.json({ answer: response.text() });
+      const response = await chat.sendMessage(question);
+      res.json({ answer: response.text });
     } catch (error: any) {
       console.error("Oracle Error:", error);
       const errorMsg = error?.message || String(error);
@@ -147,17 +151,16 @@ async function startServer() {
 
       const userPrompt = `Niyet: ${intent}. Ruh Hali: ${mood || 'Belirtilmedi'}. Harita Verileri: ${JSON.stringify(chartData)}.`;
 
-      const model = genAI.getGenerativeModel({ 
-        model: "gemini-1.5-flash",
-        generationConfig: { responseMimeType: "application/json" }
-      });
-
-      const result = await model.generateContent({
-        contents: [{ role: "user", parts: [{ text: systemPrompt + "\n\n" + userPrompt }] }]
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: userPrompt,
+        config: {
+          systemInstruction: systemPrompt,
+          responseMimeType: "application/json"
+        }
       });
       
-      const response = await result.response;
-      const text = response.text();
+      const text = response.text;
       res.json(JSON.parse(text));
     } catch (error: any) {
       console.error("Ritual generation error:", error);
