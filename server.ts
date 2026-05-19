@@ -104,7 +104,7 @@ export async function createServer() {
       prompt += ` Yanıtı Türkçe ver.`;
 
       const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: "gemini-3.1-flash-lite",
         contents: prompt
       });
       res.json({ analysis: response.text });
@@ -130,7 +130,7 @@ export async function createServer() {
       Görevin kullanıcının sorusuna derin, mistik ve astrolojik temelli bir yanıt vermektir.`;
 
       const chat = ai.chats.create({
-        model: "gemini-3-flash-preview",
+        model: "gemini-3.1-flash-lite",
         config: { systemInstruction: systemPrompt },
         history: history ? history.map((h: any) => ({
           role: h.role === 'model' ? 'model' : 'user',
@@ -167,7 +167,7 @@ export async function createServer() {
       const userPrompt = `Niyet: ${intent}. Ruh Hali: ${mood || 'Belirtilmedi'}. Harita Verileri: ${JSON.stringify(chartData)}.`;
 
       const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: "gemini-3.1-flash-lite",
         contents: userPrompt,
         config: {
           systemInstruction: systemPrompt,
@@ -179,6 +179,10 @@ export async function createServer() {
       res.json(JSON.parse(text));
     } catch (error: any) {
       console.error("Ritual generation error:", error);
+      const errorMsg = error?.message || String(error);
+      if (error?.status === 503 || errorMsg.includes("503") || errorMsg.includes("UNAVAILABLE")) {
+        return res.status(503).json({ error: "Gökler şu an çok yoğun. Lütfen birkaç dakika sonra tekrar deneyin." });
+      }
       res.status(500).json({ error: "Ritüel oluşturulamadı." });
     }
   });
