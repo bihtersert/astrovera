@@ -32,16 +32,25 @@
         async function startFirebase() {
             window.firebaseInitStatus = "loading";
             try {
-                console.log("Firebase başlatılıyor...");
-                const response = await fetch('/api/firebase-config');
-                if (!response.ok) throw new Error("Kozmik yapılandırma sunucudan alınamadı (HTTP " + response.status + ")");
-                const firebaseConfig = await response.json();
+                console.log("Firebase yapılandırması alınıyor...");
+                let firebaseConfig;
+                try {
+                    const response = await fetch('/api/firebase-config');
+                    if (!response.ok) throw new Error(`HTTP ${response.status}: Sunucu yapılandırması veremedi.`);
+                    firebaseConfig = await response.json();
+                } catch (err) {
+                    console.error("Fetch Hatası:", err);
+                    window.firebaseInitStatus = "error_fetch_failed";
+                    throw new Error("Kozmik yapılandırma sunucudan alınamadı. (API Bağlantı Hatası)");
+                }
                 
-                if (!firebaseConfig.apiKey) {
+                if (!firebaseConfig || !firebaseConfig.apiKey) {
+                    console.error("Gelen yapılandırma geçersiz:", firebaseConfig);
                     window.firebaseInitStatus = "error_missing_config";
-                    console.error("Firebase API anahtarı eksik!");
+                    throw new Error("Firebase API anahtarı boş döndü. Lütfen Vercel ayarlarını kontrol edin.");
                 }
 
+                console.log("Firebase başlatılıyor. Proje ID:", firebaseConfig.projectId);
                 const app = initializeApp(firebaseConfig);
                 window.firebaseData.db = getFirestore(app, firebaseConfig.firestoreDatabaseId || "default");
                 window.firebaseData.auth = getAuth(app);
@@ -382,17 +391,17 @@
                 <p class="text-sm font-light text-white/60 text-center italic leading-relaxed">"Niyetini evrene fısılda, yıldızlar senin için bir arınma yolu çizsin."</p>
                 
                 <div class="grid grid-cols-2 gap-4">
-                    <button onclick="selectRitualIntent('Aşk & İlişkiler')" class="intent-btn glass p-6 text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-amber-500 hover:border-amber-500/30 transition-all flex flex-col items-center gap-3 active:scale-95">
-                        <i class="fa-solid fa-heart text-2xl"></i> Aşk
+                    <button onclick="selectRitualIntent('Aşk & İlişkiler', this)" data-intent="Aşk & İlişkiler" class="intent-btn glass p-6 text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-amber-500 hover:border-amber-500/30 transition-all flex flex-col items-center gap-3 active:scale-95">
+                        <i class="fa-solid fa-heart text-2xl pointer-events-none"></i> Aşk
                     </button>
-                    <button onclick="selectRitualIntent('Bereket & Şans')" class="intent-btn glass p-6 text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-amber-500 hover:border-amber-500/30 transition-all flex flex-col items-center gap-3 active:scale-95">
-                        <i class="fa-solid fa-coins text-2xl"></i> Bereket
+                    <button onclick="selectRitualIntent('Bereket & Şans', this)" data-intent="Bereket & Şans" class="intent-btn glass p-6 text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-amber-500 hover:border-amber-500/30 transition-all flex flex-col items-center gap-3 active:scale-95">
+                        <i class="fa-solid fa-coins text-2xl pointer-events-none"></i> Bereket
                     </button>
-                    <button onclick="selectRitualIntent('Arınma & Enerji')" class="intent-btn glass p-6 text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-amber-500 hover:border-amber-500/30 transition-all flex flex-col items-center gap-3 active:scale-95">
-                        <i class="fa-solid fa-wind text-2xl"></i> Arınma
+                    <button onclick="selectRitualIntent('Arınma & Enerji', this)" data-intent="Arınma & Enerji" class="intent-btn glass p-6 text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-amber-500 hover:border-amber-500/30 transition-all flex flex-col items-center gap-3 active:scale-95">
+                        <i class="fa-solid fa-wind text-2xl pointer-events-none"></i> Arınma
                     </button>
-                    <button onclick="selectRitualIntent('Kariyer & Başarı')" class="intent-btn glass p-6 text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-amber-500 hover:border-amber-500/30 transition-all flex flex-col items-center gap-3 active:scale-95">
-                        <i class="fa-solid fa-briefcase text-2xl"></i> Başarı
+                    <button onclick="selectRitualIntent('Kariyer & Başarı', this)" data-intent="Kariyer & Başarı" class="intent-btn glass p-6 text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-amber-500 hover:border-amber-500/30 transition-all flex flex-col items-center gap-3 active:scale-95">
+                        <i class="fa-solid fa-briefcase text-2xl pointer-events-none"></i> Başarı
                     </button>
                 </div>
 
@@ -809,31 +818,46 @@
         // --- RİTÜEL ATÖLYESİ MANTIK ---
         window.selectedRitualIntent = null;
 
-        function selectRitualIntent(intent) {
+        function selectRitualIntent(intent, btn) {
             window.selectedRitualIntent = intent;
-            document.querySelectorAll('.intent-btn').forEach(btn => {
-                if(btn.innerText.includes(intent.split(' ')[0])) {
-                    btn.classList.add('border-amber-500', 'text-amber-500', 'bg-amber-500/5');
-                    btn.classList.remove('text-white/40');
+            document.getElementById('custom-intent').value = ""; // Clear custom if category selected
+            
+            document.querySelectorAll('.intent-btn').forEach(b => {
+                if(b === btn) {
+                    b.classList.add('border-amber-500', 'text-amber-500', 'bg-amber-500/10');
+                    b.classList.remove('text-white/40');
                 } else {
-                    btn.classList.remove('border-amber-500', 'text-amber-500', 'bg-amber-500/5');
-                    btn.classList.add('text-white/40');
+                    b.classList.remove('border-amber-500', 'text-amber-500', 'bg-amber-500/10');
+                    b.classList.add('text-white/40');
                 }
             });
         }
 
         async function generateCustomRitual() {
-            const custom = document.getElementById('custom-intent').value;
+            const customInput = document.getElementById('custom-intent');
+            const custom = customInput ? customInput.value.trim() : "";
             const intent = custom || window.selectedRitualIntent;
             
             if(!intent) return alert("Lütfen bir niyet seçin veya kendi niyetinizi yazın.");
             
+            // Eğer chart data yoksa, girişlerden hesaplamayı dene
+            if (!window.currentChartData) {
+                const date = document.getElementById('birth-date').value;
+                const time = document.getElementById('birth-time').value;
+                if (date && time) {
+                    window.currentChartData = calculateDetailedChart(date, time);
+                }
+            }
+
             const btn = document.getElementById('generate-ritual-btn');
             const display = document.getElementById('ritual-display');
             const placeholder = document.getElementById('ritual-placeholder');
             const creator = document.getElementById('ritual-creator-box');
 
+            if (!btn) return;
+
             btn.disabled = true;
+            const originalHTML = btn.innerHTML;
             btn.innerHTML = '<i class="fa-solid fa-spinner animate-spin"></i> Kozmik Akış Hazırlanıyor...';
             
             try {
@@ -842,7 +866,7 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
                         intent, 
-                        mood: window.userMood, 
+                        mood: window.userMood || "Dengeli", 
                         chartData: window.currentChartData 
                     })
                 });
@@ -851,66 +875,71 @@
                 
                 if(data.error) throw new Error(data.error);
 
-                placeholder.classList.add('hidden');
-                creator.classList.add('hidden');
-                display.classList.remove('hidden');
-                
-                display.innerHTML = `
-                    <div class="glass p-8 border-amber-500/20 bg-gradient-to-b from-amber-500/5 to-transparent relative overflow-hidden">
-                        <div class="absolute -right-10 -top-10 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl"></div>
-                        <div class="text-center mb-8">
-                            <span class="text-[10px] uppercase font-black tracking-[0.4em] text-amber-500 mb-2 block">Özel Ritüel Tasarımı</span>
-                            <h3 class="text-2xl font-black italic gold-shimmer">${data.title}</h3>
-                        </div>
+                if (placeholder) placeholder.classList.add('hidden');
+                if (creator) creator.classList.add('hidden');
+                if (display) {
+                    display.classList.remove('hidden');
+                    display.innerHTML = `
+                        <div class="glass p-8 border-amber-500/20 bg-gradient-to-b from-amber-500/5 to-transparent relative overflow-hidden">
+                            <div class="absolute -right-10 -top-10 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl"></div>
+                            <div class="text-center mb-8">
+                                <span class="text-[10px] uppercase font-black tracking-[0.4em] text-amber-500 mb-2 block">Özel Ritüel Tasarımı</span>
+                                <h3 class="text-2xl font-black italic gold-shimmer">${data.title}</h3>
+                            </div>
 
-                        <div class="space-y-6">
-                            <div>
-                                <h4 class="text-[10px] font-black uppercase tracking-widest text-white/30 mb-3 flex items-center gap-2">
-                                    <i class="fa-solid fa-sparkles text-amber-500"></i> Gerekli Kozmik Araçlar
-                                </h4>
-                                <div class="flex flex-wrap gap-2">
-                                    ${data.elements.map(el => `<span class="bg-white/5 border border-white/10 px-3 py-1.5 rounded-xl text-[11px] font-medium text-white/70">${el}</span>`).join('')}
+                            <div class="space-y-6">
+                                <div>
+                                    <h4 class="text-[10px] font-black uppercase tracking-widest text-white/30 mb-3 flex items-center gap-2">
+                                        <i class="fa-solid fa-sparkles text-amber-500"></i> Gerekli Kozmik Araçlar
+                                    </h4>
+                                    <div class="flex flex-wrap gap-2">
+                                        ${data.elements.map(el => `<span class="bg-white/5 border border-white/10 px-3 py-1.5 rounded-xl text-[11px] font-medium text-white/70">${el}</span>`).join('')}
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <h4 class="text-[10px] font-black uppercase tracking-widest text-white/30 mb-3 flex items-center gap-2">
+                                        <i class="fa-solid fa-clock text-amber-500"></i> En Etkili Zamanlama
+                                    </h4>
+                                    <p class="text-xs text-amber-100/60 italic">${data.timing}</p>
+                                </div>
+
+                                <div class="space-y-4">
+                                    <h4 class="text-[10px] font-black uppercase tracking-widest text-white/30 mb-1">Ritüel Adımları</h4>
+                                    ${data.steps.map((step, i) => `
+                                        <div class="ritual-step p-4 glass border-white/5 flex gap-4 items-start group hover:bg-white/5 transition-all">
+                                            <span class="w-6 h-6 rounded-full bg-amber-500 text-black text-[10px] font-black flex items-center justify-center shrink-0 shadow-lg">${i+1}</span>
+                                            <p class="text-sm font-light text-slate-200 leading-relaxed">${step}</p>
+                                        </div>
+                                    `).join('')}
+                                </div>
+
+                                <div class="pt-6 mt-6 border-t border-white/10 text-center">
+                                    <h4 class="text-[10px] font-black uppercase tracking-widest text-amber-500/50 mb-3">Mühürleme Cümlesi</h4>
+                                    <p class="text-lg font-light italic text-white drop-shadow-lg">"${data.seal}"</p>
                                 </div>
                             </div>
 
-                            <div>
-                                <h4 class="text-[10px] font-black uppercase tracking-widest text-white/30 mb-3 flex items-center gap-2">
-                                    <i class="fa-solid fa-clock text-amber-500"></i> En Etkili Zamanlama
-                                </h4>
-                                <p class="text-xs text-amber-100/60 italic">${data.timing}</p>
-                            </div>
-
-                            <div class="space-y-4">
-                                <h4 class="text-[10px] font-black uppercase tracking-widest text-white/30 mb-1">Ritüel Adımları</h4>
-                                ${data.steps.map((step, i) => `
-                                    <div class="ritual-step p-4 glass border-white/5 flex gap-4 items-start group hover:bg-white/5 transition-all">
-                                        <span class="w-6 h-6 rounded-full bg-amber-500 text-black text-[10px] font-black flex items-center justify-center shrink-0 shadow-lg">${i+1}</span>
-                                        <p class="text-sm font-light text-slate-200 leading-relaxed">${step}</p>
-                                    </div>
-                                `).join('')}
-                            </div>
-
-                            <div class="pt-6 mt-6 border-t border-white/10 text-center">
-                                <h4 class="text-[10px] font-black uppercase tracking-widest text-amber-500/50 mb-3">Mühürleme Cümlesi</h4>
-                                <p class="text-lg font-light italic text-white drop-shadow-lg">"${data.seal}"</p>
-                            </div>
+                            <button onclick="resetRitualCreator()" class="w-full mt-10 py-4 text-[10px] font-black uppercase tracking-widest text-white/30 hover:text-white transition-all border border-white/5 rounded-2xl">
+                                Yeni Bir Ritüel Tasarla
+                            </button>
                         </div>
-
-                        <button onclick="resetRitualCreator()" class="w-full mt-10 py-4 text-[10px] font-black uppercase tracking-widest text-white/30 hover:text-white transition-all border border-white/5 rounded-2xl">
-                            Yeni Bir Ritüel Tasarla
-                        </button>
-                    </div>
-                `;
+                    `;
+                }
                 
                 // Firestore'a kaydet
-                await saveToFirebase({ ritualCount: window.firebaseData.increment(1) });
+                if (window.firebaseData && window.firebaseData.increment) {
+                    await saveToFirebase({ ritualCount: window.firebaseData.increment(1) });
+                }
                 
             } catch (e) {
                 console.error(e);
                 alert("Ritüel tasarlanırken kozmik bir hata oluştu: " + e.message);
             } finally {
-                btn.disabled = false;
-                btn.innerHTML = '<i class="fa-solid fa-scroll-old"></i> Ritüeli Tasarla';
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = originalHTML;
+                }
             }
         }
 

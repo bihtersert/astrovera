@@ -4,14 +4,15 @@ import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
+import { fileURLToPath } from 'url';
 
 dotenv.config();
 
-// Sunucu yapılandırması başlatılıyor...
-async function startServer() {
-  const app = express();
-  const PORT = 3000;
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
+export async function createServer() {
+  const app = express();
   app.use(express.json());
 
   // Gemini AI entegrasyonu (Google GenAI SDK - Modern Approach)
@@ -24,8 +25,9 @@ async function startServer() {
     }
   });
 
-  // API Routes
+// API Routes
   app.get("/api/firebase-config", (req, res) => {
+    // Try environment variables first
     let config = {
       apiKey: process.env.VITE_FIREBASE_API_KEY || process.env.FIREBASE_API_KEY,
       authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN || process.env.FIREBASE_AUTH_DOMAIN,
@@ -36,25 +38,38 @@ async function startServer() {
       firestoreDatabaseId: process.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || process.env.FIREBASE_FIRESTORE_DATABASE_ID,
     };
 
+    // Fallback to local file if essential fields are missing
     if (!config.apiKey || !config.projectId) {
       try {
-        const configPath = path.join(process.cwd(), "firebase-applet-config.json");
-        if (fs.existsSync(configPath)) {
-          const fileConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-          config = {
-            apiKey: config.apiKey || fileConfig.apiKey,
-            authDomain: config.authDomain || fileConfig.authDomain,
-            projectId: config.projectId || fileConfig.projectId,
-            storageBucket: config.storageBucket || fileConfig.storageBucket,
-            messagingSenderId: config.messagingSenderId || fileConfig.messagingSenderId,
-            appId: config.appId || fileConfig.appId,
-            firestoreDatabaseId: config.firestoreDatabaseId || fileConfig.firestoreDatabaseId,
-          };
+        const paths = [
+          path.join(process.cwd(), "firebase-applet-config.json"),
+          path.join(__dirname, "..", "firebase-applet-config.json"),
+          path.join(__dirname, "firebase-applet-config.json")
+        ];
+        
+        for (const p of paths) {
+          if (fs.existsSync(p)) {
+            const fileConfig = JSON.parse(fs.readFileSync(p, "utf-8"));
+            config = {
+              apiKey: config.apiKey || fileConfig.apiKey,
+              authDomain: config.authDomain || fileConfig.authDomain,
+              projectId: config.projectId || fileConfig.projectId,
+              storageBucket: config.storageBucket || fileConfig.storageBucket,
+              messagingSenderId: config.messagingSenderId || fileConfig.messagingSenderId,
+              appId: config.appId || fileConfig.appId,
+              firestoreDatabaseId: config.firestoreDatabaseId || fileConfig.firestoreDatabaseId,
+            };
+            break;
+          }
         }
       } catch (e) {
-        console.error("Config dosyası okuma hatası:", e);
+        console.error("Config fallback error:", e);
       }
     }
+
+    // Security: Log found config (masked) for server logs
+    console.log(`Firebase Config Requested. Found keys: ${Object.keys(config).filter(k => !!config[k]).join(', ')}`);
+    
     res.json(config);
   });
 
@@ -182,9 +197,17 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`ASTROVERA running on http://localhost:${PORT}`);
+  return app;
+}
+
+// Port and direct execution handling
+const PORT = Number(process.env.PORT) || 3000;
+if (process.env.NODE_ENV !== "production") {
+  createServer().then(app => {
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`ASTROVERA running on http://localhost:${PORT}`);
+    });
   });
 }
 
-startServer();
+export default createServer;
