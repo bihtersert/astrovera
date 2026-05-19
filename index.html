@@ -27,6 +27,9 @@
         // Global Firebase state
         window.firebaseData = { db: null, auth: null, user: null, appId: 'astrovera-app' };
         window.loginWithGoogle = () => console.log("Bağlantı henüz hazır değil...");
+        window.oracleHistory = [];
+        window.userMood = "Sakin 🧘";
+        window.selectedRitualIntent = null;
 
         // Configuration and Initialization
         async function startFirebase() {
@@ -50,6 +53,7 @@
                     throw new Error("Firebase API anahtarı boş döndü. Lütfen Vercel ayarlarını kontrol edin.");
                 }
 
+                window.firebaseConfig = firebaseConfig;
                 console.log("Firebase başlatılıyor. Proje ID:", firebaseConfig.projectId);
                 const app = initializeApp(firebaseConfig);
                 window.firebaseData.db = getFirestore(app, firebaseConfig.firestoreDatabaseId || "default");
@@ -86,7 +90,23 @@
                         const domain = window.location.hostname;
                         
                         if (e.code === 'auth/unauthorized-domain') {
-                            alert(`ALAN ADI YETKİSİ HATASI!\n\nŞu anki adres: ${domain}\n\nBu adres Firebase panelinde 'Authorized Domains' listesine eklenmemiş.\n\nÇözüm:\n1. Firebase Console > Authentication > Settings sekmesine gidin.\n2. 'Authorized Domains' (Yetkilendirilmiş Alan Adları) listesini bulun.\n3. Listeye '${domain}' adresini ekleyin.\n4. Ayrıca Vercel için '*.vercel.app' şeklinde bir kayıt eklemeniz önerilir.`);
+                            const errorHint = document.getElementById('auth-error-hint');
+                            if (errorHint) {
+                                errorHint.innerHTML = `
+                                    <div class="bg-red-500/10 border border-red-500/20 p-4 rounded-2xl text-left space-y-2">
+                                        <p class="text-red-400 font-bold text-xs uppercase tracking-wider flex items-center gap-2">
+                                            <i class="fa-solid fa-circle-exclamation"></i> Alan Adı Yetkisi Hatası
+                                        </p>
+                                        <p class="text-slate-300 text-[10px] leading-relaxed">
+                                            Firebase ayarlarında bu domain yetkilendirilmemiş. Lütfen şu adresi kopyalayıp Firebase Console'daki <b>Authorized Domains</b> listesine ekleyin:
+                                        </p>
+                                        <code class="block bg-black/40 p-2 rounded text-[10px] text-amber-400 border border-white/5 break-all select-all font-mono">${domain}</code>
+                                        <a href="https://console.firebase.google.com/project/${window.firebaseConfig?.projectId}/authentication/settings" target="_blank" class="block text-center py-2 bg-white/5 hover:bg-white/10 rounded-xl text-[9px] uppercase font-black tracking-widest transition-colors">Firebase Konsoluna Git <i class="fa-solid fa-external-link ml-1"></i></a>
+                                    </div>
+                                `;
+                                errorHint.classList.remove('hidden');
+                            }
+                            alert(`ALAN ADI YETKİSİ HATASI!\n\nŞu anki adres: ${domain}\n\nBu adres Firebase panelinde yetkilendirilmemiş.`);
                         } else if (e.code === 'auth/operation-not-allowed') {
                             alert("HATA: Google Girişi Devre Dışı!\n\nFirebase Console > Authentication > Sign-in Method kısmından Google seçeneğini aktif etmelisiniz.");
                         } else if (e.code === 'auth/popup-closed-by-user') {
@@ -237,18 +257,22 @@
                 <p class="text-[10px] uppercase font-black tracking-widest text-white/30">Kozmik Bağlantı Kuruluyor...</p>
             </div>
         </div>
-        <div class="relative z-10 space-y-8 animate-fade-in">
-            <div class="flex flex-col items-center gap-4">
-                <div class="w-20 h-20 bg-gradient-to-tr from-amber-500 to-amber-900 rounded-[32px] flex items-center justify-center shadow-2xl rotate-12">
-                    <i class="fa-solid fa-star-and-crescent text-black text-3xl -rotate-12"></i>
+        <div class="relative z-10 space-y-8 animate-fade-in w-full max-w-sm">
+            <div class="flex flex-col items-center gap-6">
+                <div class="w-24 h-24 bg-gradient-to-tr from-amber-500 to-amber-900 rounded-[32px] flex items-center justify-center shadow-2xl rotate-12">
+                    <i class="fa-solid fa-star-and-crescent text-black text-4xl -rotate-12"></i>
                 </div>
                 <h1 class="text-4xl font-black italic gold-shimmer tracking-tighter">ASTROVERA</h1>
             </div>
             <p class="text-slate-400 font-light max-w-xs mx-auto">Kozmik sırlarını keşfetmek için yıldızlarla bağlantı kur.</p>
             <button onclick="loginWithGoogle()" class="w-full bg-white text-black font-black py-5 px-10 rounded-2xl flex items-center justify-center gap-3 transition-transform active:scale-95 shadow-xl">
-                <i class="fa-brands fa-google"></i>
+                <i class="fa-brands fa-google text-amber-600"></i>
                 Google ile Kozmik Giriş
             </button>
+            <p id="auth-error-hint" class="hidden text-[10px] text-red-400/80 mt-4 leading-relaxed">
+                Alan adı yetkisi hatası tespit edildi. <br> 
+                Lütfen bu URL'yi Firebase Console > Authentication > Settings > Authorized Domains listesine ekleyin.
+            </p>
         </div>
     </div>
 
@@ -316,12 +340,51 @@
                     </button>
                 </div>
             </div>
-            <div id="ai-insight" class="hidden glass p-8 border-purple-500/30 bg-purple-900/10 relative overflow-hidden">
+            
+            <div id="ai-insight" class="hidden glass p-8 border-amber-500/30 bg-amber-900/10 relative overflow-hidden">
                 <div class="flex items-center gap-5 mb-8">
-                    <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-purple-600 to-indigo-900 flex items-center justify-center text-2xl shadow-xl"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
-                    <div><span class="text-[10px] font-black uppercase text-purple-400">Astrovera AI</span><p id="ai-status" class="text-xs text-white/40 italic">Veri Eşitleniyor...</p></div>
+                    <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-600 to-amber-900 flex items-center justify-center text-2xl shadow-xl"><i class="fa-solid fa-wand-magic-sparkles text-black"></i></div>
+                    <div><span class="text-[10px] font-black uppercase text-amber-500">Astrovera AI</span><p id="ai-status" class="text-xs text-white/40 italic">Veri Eşitleniyor...</p></div>
                 </div>
                 <div id="ai-output" class="text-lg leading-loose font-light text-slate-100 min-h-[120px]"></div>
+            </div>
+        </section>
+
+        <!-- DOĞUM BİLGİSİ GİRİŞİ -->
+        <section id="page-birth-config" class="page space-y-10">
+            <div class="glass p-8">
+                <div class="flex items-center gap-4 mb-8">
+                    <button onclick="switchTab('home')" class="w-10 h-10 glass rounded-full flex items-center justify-center text-white/50"><i class="fa-solid fa-arrow-left"></i></button>
+                    <h2 class="text-2xl font-black">Harita Bilgilerin</h2>
+                </div>
+                <p class="text-slate-400 font-light leading-relaxed mb-8">Gökyüzünün diliyle ruhuna bir köprü kuralım. Doğum anındaki gezegen konumları senin parmak izin gibidir.</p>
+                <div class="space-y-7">
+                    <div>
+                        <label class="text-[11px] uppercase tracking-[0.25em] text-purple-400 font-black mb-3 block ml-1">Kozmik İsmin</label>
+                        <input type="text" id="user-name" placeholder="İsmin..." class="w-full bg-white/5 border border-white/10 p-5 rounded-3xl outline-none focus:border-purple-500/50 transition-all text-white placeholder:text-white/20 text-lg">
+                    </div>
+                    <div class="grid grid-cols-2 gap-5">
+                        <div>
+                            <label class="text-[11px] uppercase tracking-[0.25em] text-purple-400 font-black mb-3 block ml-1">Doğum Günün</label>
+                            <input type="date" id="birth-date" class="w-full bg-white/5 border border-white/10 p-5 rounded-3xl outline-none focus:border-purple-500/50 transition-all text-white">
+                        </div>
+                        <div>
+                            <label class="text-[11px] uppercase tracking-[0.25em] text-purple-400 font-black mb-3 block ml-1">Saatin</label>
+                            <input type="time" id="birth-time" class="w-full bg-white/5 border border-white/10 p-5 rounded-3xl outline-none focus:border-purple-500/50 transition-all text-white">
+                        </div>
+                    </div>
+                    <button id="analyze-btn" onclick="runAstroAnalysis()" class="w-full btn-glow bg-gradient-to-r from-purple-500 to-indigo-700 text-white font-black py-6 rounded-3xl shadow-2xl active:scale-95 transition-all uppercase tracking-[0.2em] text-xs mt-6">
+                        Yıldızlara Sor ve Keşfet
+                    </button>
+                </div>
+            </div>
+            <div id="ai-insight" class="hidden glass p-8 border-amber-500/30 bg-amber-900/10 relative overflow-hidden">
+                <div class="flex items-center gap-5 mb-8">
+                    <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-600 to-amber-900 flex items-center justify-center text-2xl shadow-xl"><i class="fa-solid fa-wand-magic-sparkles text-black"></i></div>
+                    <div><span class="text-[10px] font-black uppercase text-amber-500">Astrovera AI</span><p id="ai-status" class="text-xs text-white/40 italic">Veri Eşitleniyor...</p></div>
+                </div>
+                <div id="ai-output" class="text-lg leading-loose font-light text-slate-100 min-h-[120px]"></div>
+                <button onclick="switchTab('chart')" class="w-full mt-8 py-4 glass border-amber-500/20 text-amber-500 font-bold uppercase tracking-widest text-[10px]">Detaylı Haritayı İncele</button>
             </div>
         </section>
 
@@ -347,7 +410,7 @@
                     </div>
 
                     <div class="pt-6">
-                        <h3 class="text-sm font-black text-purple-500 uppercase tracking-[0.3em] border-b border-white/10 pb-4 mb-4">Ev Girişleri (Cuspis)</h3>
+                        <h3 class="text-sm font-black text-amber-500 uppercase tracking-[0.3em] border-b border-white/10 pb-4 mb-4">Ev Girişleri (Cuspis)</h3>
                         <div id="house-cusps" class="grid grid-cols-2 gap-x-8 gap-y-2">
                             <!-- Houses will be injected here -->
                         </div>
@@ -376,13 +439,13 @@
 
             <!-- Ritüel İlerleme Çubuğu -->
             <div class="glass p-5 space-y-3 relative overflow-hidden">
-                <div class="absolute -right-4 -top-4 w-16 h-16 bg-purple-500/5 rounded-full blur-2xl"></div>
+                <div class="absolute -right-4 -top-4 w-16 h-16 bg-amber-500/5 rounded-full blur-2xl"></div>
                 <div class="flex justify-between items-baseline mb-1">
                     <span class="text-[10px] uppercase font-black tracking-widest text-white/40">Ritüel Ustalığı</span>
                     <span id="ritual-exp-txt" class="text-[10px] font-mono text-amber-500">0/5</span>
                 </div>
                 <div class="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
-                    <div id="ritual-mastery-bar" class="h-full bg-gradient-to-r from-amber-500 to-purple-600 transition-all duration-1000 shadow-[0_0_15px_rgba(212,175,55,0.3)]" style="width: 0%"></div>
+                    <div id="ritual-mastery-bar" class="h-full bg-gradient-to-r from-amber-500 to-amber-900 transition-all duration-1000 shadow-[0_0_15px_rgba(212,175,55,0.3)]" style="width: 0%"></div>
                 </div>
             </div>
 
@@ -564,14 +627,12 @@
         </section>
     </main>
 
-    <nav class="fixed bottom-0 left-0 right-0 h-28 glass rounded-t-[48px] border-t border-white/10 flex items-center justify-around px-4 z-50">
-        <button onclick="switchTab('home')" id="nav-home" class="nav-link active flex flex-col items-center gap-1.5"><i class="fa-solid fa-house-chimney-window text-xl"></i><span class="text-[9px] uppercase font-black">Evim</span></button>
-        <button onclick="switchTab('chart')" id="nav-chart" class="nav-link flex flex-col items-center gap-1.5 text-white/30"><i class="fa-solid fa-compass text-xl"></i><span class="text-[9px] uppercase font-black">Haritam</span></button>
-        <button onclick="switchTab('zodiac-list')" id="nav-zodiac-list" class="nav-link flex flex-col items-center gap-1.5 text-white/30"><i class="fa-solid fa-circle-nodes text-xl"></i><span class="text-[9px] uppercase font-black">Burçlar</span></button>
-        <div class="relative -top-10"><button onclick="switchTab('home')" class="w-20 h-20 bg-gradient-to-tr from-amber-400 to-amber-700 rounded-[28px] flex items-center justify-center text-black shadow-2xl shadow-amber-500/40 rotate-45"><i class="fa-solid fa-wand-magic-sparkles -rotate-45 text-3xl"></i></button></div>
+        <nav class="fixed bottom-0 left-0 right-0 h-28 glass rounded-t-[48px] border-t border-white/10 flex items-center justify-around px-4 z-50">
+        <button onclick="switchTab('home')" id="nav-home" class="nav-link active flex flex-col items-center gap-1.5"><i class="fa-solid fa-house-chimney-window text-xl"></i><span class="text-[9px] uppercase font-black">Ana Sayfa</span></button>
         <button onclick="switchTab('oracle')" id="nav-oracle" class="nav-link flex flex-col items-center gap-1.5 text-white/30"><i class="fa-solid fa-crystal-ball text-xl"></i><span class="text-[9px] uppercase font-black">Kahin</span></button>
+        <div class="relative -top-10"><button onclick="switchTab('home')" class="w-20 h-20 bg-gradient-to-tr from-purple-500 to-indigo-800 rounded-[28px] flex items-center justify-center text-white shadow-2xl shadow-purple-500/40 rotate-45"><i class="fa-solid fa-star-and-crescent -rotate-45 text-3xl"></i></button></div>
         <button onclick="switchTab('ritual')" id="nav-ritual" class="nav-link flex flex-col items-center gap-1.5 text-white/30"><i class="fa-solid fa-moon-stars text-xl"></i><span class="text-[9px] uppercase font-black">Ritüel</span></button>
-        <button onclick="switchTab('profile')" id="nav-profile" class="nav-link flex flex-col items-center gap-1.5 text-white/30"><i class="fa-solid fa-user-astronomer text-xl"></i><span class="text-[9px] uppercase font-black">Profil</span></button>
+        <button onclick="switchTab('profile')" id="nav-profile" class="nav-link flex flex-col items-center gap-1.5 text-white/30"><i class="fa-solid fa-user-astronaut text-xl"></i><span class="text-[9px] uppercase font-black">Profil</span></button>
     </nav>
 
     <!-- KOZMİK SÖZLÜK MODALI -->
@@ -692,7 +753,7 @@
             if (!TARGET_PAGE) return;
 
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-            TARGET_PAGE.classList.add('active');
+            setTimeout(() => { TARGET_PAGE.classList.add('active'); }, 50);
             
             document.querySelectorAll('.nav-link').forEach(l => { 
                 l.classList.remove('active'); 
@@ -700,6 +761,7 @@
             });
             const navBtn = document.getElementById('nav-' + id);
             if(navBtn) { navBtn.classList.add('active'); navBtn.classList.remove('text-white/30'); }
+            
             if(id === 'chart') runChartProgress();
             if(id === 'profile') refreshCosmicMessage();
             if(id === 'zodiac-list') renderZodiacGrid();

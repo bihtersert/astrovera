@@ -1,15 +1,18 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
-import { createServer as createViteServer } from "vite";
+let createViteServer: any = null;
+if (process.env.NODE_ENV !== "production") {
+    import("vite").then(m => { createViteServer = m.createServer; });
+}
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 import { fileURLToPath } from 'url';
 
 dotenv.config();
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const _filename = (typeof import.meta !== 'undefined' && import.meta.url) ? fileURLToPath(import.meta.url) : '';
+const _dirname = _filename ? path.dirname(_filename) : (typeof __dirname !== 'undefined' ? __dirname : process.cwd());
 
 export async function createServer() {
   const app = express();
@@ -41,14 +44,18 @@ export async function createServer() {
     // Fallback to local file if essential fields are missing
     if (!config.apiKey || !config.projectId) {
       try {
+        const rootPath = process.cwd();
         const paths = [
-          path.join(process.cwd(), "firebase-applet-config.json"),
-          path.join(__dirname, "..", "firebase-applet-config.json"),
-          path.join(__dirname, "firebase-applet-config.json")
+          path.join(rootPath, "firebase-applet-config.json"),
+          path.join(rootPath, "api", "firebase-applet-config.json"),
+          path.join(_dirname, "firebase-applet-config.json"),
+          path.join(_dirname, "..", "firebase-applet-config.json"),
+          path.join(_dirname, "..", "..", "firebase-applet-config.json")
         ];
         
         for (const p of paths) {
           if (fs.existsSync(p)) {
+            console.log(`Found config file at: ${p}`);
             const fileConfig = JSON.parse(fs.readFileSync(p, "utf-8"));
             config = {
               apiKey: config.apiKey || fileConfig.apiKey,
@@ -188,11 +195,21 @@ export async function createServer() {
   });
 
   if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
+    if (createViteServer) {
+        const vite = await createViteServer({
+          server: { middlewareMode: true },
+          appType: "spa",
+        });
+        app.use(vite.middlewares);
+    } else {
+        // Fallback if import is still pending
+        const { createServer: cvs } = await import("vite");
+        const vite = await cvs({
+          server: { middlewareMode: true },
+          appType: "spa",
+        });
+        app.use(vite.middlewares);
+    }
   } else {
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
@@ -206,7 +223,10 @@ export async function createServer() {
 
 // Port and direct execution handling
 const PORT = Number(process.env.PORT) || 3000;
-if (process.env.NODE_ENV !== "production") {
+
+// In Vercel, we don't call listen, but in regular Node (Cloud Run), we do.
+// We can check if we are in a Vercel/Serverless environment or just run it.
+if (process.env.VERCEL === undefined) {
   createServer().then(app => {
     app.listen(PORT, "0.0.0.0", () => {
       console.log(`ASTROVERA running on http://localhost:${PORT}`);

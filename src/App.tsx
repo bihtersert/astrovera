@@ -11,11 +11,18 @@ import {
   Star, 
   Compass,
   Loader2,
-  RefreshCcw
+  RefreshCcw,
+  Coins,
+  Bell
 } from "lucide-react";
 
 // STREAMING_CHUNK: Tip tanımlamaları ve yardımcı fonksiyonlar...
-type View = "home" | "chart" | "ritual" | "profile";
+type View = "dashboard" | "home" | "chart" | "ritual" | "profile" | "kahin";
+
+interface Message {
+  role: "user" | "model";
+  parts: { text: string }[];
+}
 
 interface Ritual {
   id: number;
@@ -98,11 +105,15 @@ const Starfield = () => {
 
 // STREAMING_CHUNK: Ana Uygulama Bileşeni...
 export default function App() {
-  const [currentView, setCurrentView] = useState<View>("home");
+  const [currentView, setCurrentView] = useState<View>("dashboard");
   const [formData, setFormData] = useState({ name: "", birthDate: "", birthTime: "" });
   const [analysis, setAnalysis] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [typewriterText, setTypewriterText] = useState("");
+  const [oracleQuestion, setOracleQuestion] = useState("");
+  const [oracleMessages, setOracleMessages] = useState<Message[]>([]);
+  const [isOracleLoading, setIsOracleLoading] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
   // STREAMING_CHUNK: Daktilo efekti mantığı...
   useEffect(() => {
@@ -149,6 +160,44 @@ export default function App() {
     }
   };
 
+  const handleOracleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!oracleQuestion.trim() || isOracleLoading) return;
+
+    const userMessage: Message = { role: "user", parts: [{ text: oracleQuestion }] };
+    setOracleMessages(prev => [...prev, userMessage]);
+    const currentQuestion = oracleQuestion;
+    setOracleQuestion("");
+    setIsOracleLoading(true);
+
+    try {
+      const response = await fetch("/api/ask-oracle", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          question: currentQuestion,
+          name: formData.name || "Kozmik Yolcu",
+          history: oracleMessages
+        }),
+      });
+      const data = await response.json();
+      
+      if (!response.ok) {
+        setOracleMessages(prev => [...prev, { role: "model", parts: [{ text: data.error || "Pardon, bir bağlantı kopukluğu oldu." }] }]);
+      } else {
+        setOracleMessages(prev => [...prev, { role: "model", parts: [{ text: data.answer }] }]);
+      }
+    } catch (error) {
+      console.error("Oracle Error:", error);
+      setOracleMessages(prev => [...prev, { role: "model", parts: [{ text: "Kozmik fısıltılar şu an çok gürültülü, tekrar sormak ister misin?" }] }]);
+    } finally {
+      setIsOracleLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [oracleMessages]);
   const rituals: Ritual[] = [
     { id: 1, title: "Yeni Ay Ritüeli", description: "Yeni başlangıçlar için 432Hz frekansı ile niyet çalışması.", duration: "15 dk", icon: <Moon className="w-6 h-6" /> },
     { id: 2, title: "Venüs Çakra Uyumu", description: "Kalp çakrasını dengeleyen sevgi meditasyonu.", duration: "20 dk", icon: <Sparkles className="w-6 h-6" /> },
@@ -181,6 +230,174 @@ export default function App() {
       {/* Main Content Area */}
       <main className="relative z-10 p-6 pb-32 max-w-7xl mx-auto">
         <AnimatePresence mode="wait">
+          {currentView === "dashboard" && (
+            <motion.div
+              key="dashboard"
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="flex flex-col items-center justify-center pt-8 min-h-[75vh] w-full"
+            >
+              {/* Top Bar like in image */}
+              <div className="w-full max-w-sm flex justify-between items-center mb-10 px-4">
+                <div className="flex items-center gap-1 bg-white px-2 py-1 rounded-full shadow-md border border-gray-100">
+                  <div className="w-6 h-6 bg-orange-400 rounded-full flex items-center justify-center shadow-inner">
+                    <Coins className="w-3.5 h-3.5 text-white" />
+                  </div>
+                  <span className="text-sm font-bold text-gray-700 px-1">124</span>
+                  <div className="w-5 h-5 bg-white border border-orange-400 rounded-full flex items-center justify-center shadow-sm">
+                    <span className="text-xs font-bold text-orange-500 leading-none">+</span>
+                  </div>
+                </div>
+                <div className="flex gap-4 items-center">
+                   <div className="relative">
+                      <Bell className="w-7 h-7 text-white fill-white/10" />
+                      <div className="absolute top-0 right-0 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-black"></div>
+                   </div>
+                   <div className="flex flex-col gap-1 justify-center">
+                      <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
+                      <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
+                      <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
+                   </div>
+                </div>
+              </div>
+
+              <div className="w-full max-w-sm bg-white rounded-[3.5rem] pt-14 pb-8 px-8 shadow-[0_20px_50px_rgba(0,0,0,0.3)] relative border-[3px] border-orange-500/20">
+                {/* Header with Circle Logo */}
+                <div className="absolute -top-12 left-1/2 -translate-x-1/2">
+                  <div className="w-28 h-28 rounded-full bg-[#1a0b2e] border-[4px] border-orange-500 p-1.5 shadow-2xl flex items-center justify-center group overflow-hidden">
+                    <div className="relative w-full h-full rounded-full flex items-center justify-center bg-gradient-to-br from-[#2d1b4d] to-black">
+                       <img src="/api/placeholder/100/100" alt="Logo" className="w-16 h-16 opacity-80" />
+                       <div className="absolute inset-0 border-2 border-orange-500/20 rounded-full animate-spin-slow"></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="text-center space-y-4">
+                  <h2 className="text-2xl font-bold text-gray-800 tracking-tight">Merhaba!</h2>
+                  <p className="text-gray-600 text-[15px] font-medium leading-relaxed">
+                    Astrovera'ya hoş geldiniz. <br/>
+                    Yapay zeka destekli astroloji aracımızla doğum haritanızı detaylı şekilde inceleyebilir, geleceğe dair öngörüler alabilir ve ilişkilerinize yönelik astrolojik analizler yapabilirsiniz. Başlamak için aşağıdaki seçeneklerden birini tercih edebilirsiniz.
+                  </p>
+                </div>
+
+                <div className="mt-12 space-y-5">
+                  <button 
+                    onClick={() => setCurrentView("home")}
+                    className="w-full bg-white border border-gray-100 py-6 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.06)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.12)] transition-all group flex items-center justify-center relative overflow-hidden"
+                  >
+                    <Star className="w-3 h-3 text-gray-400 absolute left-8 opacity-40" />
+                    <span className="text-xl font-bold text-[#f97316] tracking-wide">Doğum Haritası</span>
+                    <Star className="w-3 h-3 text-gray-400 absolute right-8 opacity-40" />
+                  </button>
+
+                  <button 
+                    onClick={() => setCurrentView("kahin")}
+                    className="w-full bg-white border border-gray-100 py-6 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.06)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.12)] transition-all group flex items-center justify-center relative overflow-hidden"
+                  >
+                    <Sparkles className="w-3 h-3 text-gray-400 absolute left-8 opacity-40" />
+                    <span className="text-xl font-bold text-[#f97316] tracking-wide">Öngörü</span>
+                    <Sparkles className="w-3 h-3 text-gray-400 absolute right-8 opacity-40" />
+                  </button>
+
+                  <button 
+                    onClick={() => setCurrentView("ritual")}
+                    className="w-full bg-white border border-gray-100 py-6 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.06)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.12)] transition-all group flex items-center justify-center relative overflow-hidden"
+                  >
+                    <Compass className="w-3 h-3 text-gray-400 absolute left-8 opacity-40" />
+                    <span className="text-xl font-bold text-[#f97316] tracking-wide">İlişki Analizi</span>
+                    <Compass className="w-3 h-3 text-gray-400 absolute right-8 opacity-40" />
+                  </button>
+                </div>
+
+                <div className="mt-10 pt-10 border-t-2 border-gray-100 flex justify-center gap-16">
+                   <button onClick={() => setCurrentView("ritual")} className="flex flex-col items-center gap-3 group">
+                      <div className="w-20 h-20 rounded-full bg-white border border-gray-50 flex items-center justify-center shadow-xl group-hover:scale-105 transition-transform group-active:scale-95">
+                        <div className="flex flex-col items-center -space-y-1">
+                          <Star className="w-3 h-3 text-gray-300 mb-1" />
+                          <span className="text-sm font-bold text-orange-400">Geçmiş</span>
+                          <Star className="w-3 h-3 text-gray-300 mt-1" />
+                        </div>
+                      </div>
+                   </button>
+                   <button onClick={() => setCurrentView("profile")} className="flex flex-col items-center gap-3 group">
+                      <div className="w-20 h-20 rounded-full bg-white border border-gray-50 flex items-center justify-center shadow-xl group-hover:scale-105 transition-transform group-active:scale-95">
+                        <div className="flex flex-col items-center -space-y-1">
+                          <Star className="w-3 h-3 text-gray-300 mb-1" />
+                          <span className="text-sm font-bold text-orange-400">Hesap</span>
+                          <Star className="w-3 h-3 text-gray-300 mt-1" />
+                        </div>
+                      </div>
+                   </button>
+                </div>
+
+                <div className="mt-12 text-center">
+                  <p className="text-[12px] text-gray-400 font-bold tracking-tight">
+                    Astrovera - Powered by AI 2026
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {currentView === "kahin" && (
+            <motion.div
+              key="kahin"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              className="flex flex-col h-[75vh] max-w-2xl mx-auto space-y-4"
+            >
+              <div className="flex items-center justify-between px-2">
+                <h2 className="text-2xl font-serif text-gold">Kahine Soru Sor</h2>
+                <button onClick={() => setCurrentView("dashboard")} className="text-white/40 hover:text-white transition-colors">Geri</button>
+              </div>
+
+              <div className="flex-1 glass rounded-3xl p-6 overflow-hidden flex flex-col">
+                <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
+                  {oracleMessages.length === 0 && (
+                    <div className="h-full flex flex-col items-center justify-center text-center p-10 opacity-60">
+                      <Sparkles className="w-12 h-12 text-gold mb-4 animate-pulse" />
+                      <p className="text-white">Kadim Kahin burada. Kalbindeki veya geleceğe dair sorularını yıldızlara fısılda...</p>
+                    </div>
+                  )}
+                  {oracleMessages.map((msg, i) => (
+                    <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                      <div className={`max-w-[80%] px-4 py-3 rounded-2xl ${msg.role === "user" ? "bg-gold text-black font-medium" : "bg-white/10 text-white/90 border border-white/5"}`}>
+                        <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.parts[0].text}</p>
+                      </div>
+                    </div>
+                  ))}
+                  {isOracleLoading && (
+                    <div className="flex justify-start">
+                      <div className="bg-white/10 px-4 py-3 rounded-2xl border border-white/5 flex gap-1">
+                        <div className="w-1.5 h-1.5 bg-gold rounded-full animate-bounce"></div>
+                        <div className="w-1.5 h-1.5 bg-gold rounded-full animate-bounce delay-75"></div>
+                        <div className="w-1.5 h-1.5 bg-gold rounded-full animate-bounce delay-150"></div>
+                      </div>
+                    </div>
+                  )}
+                  <div ref={chatEndRef} />
+                </div>
+
+                <form onSubmit={handleOracleSubmit} className="mt-6 flex gap-2">
+                  <input 
+                    type="text" 
+                    value={oracleQuestion}
+                    onChange={(e) => setOracleQuestion(e.target.value)}
+                    placeholder="Sizce bu yıl aşk hayatım nasıl olacak?"
+                    className="flex-1 bg-black/40 border border-white/20 rounded-xl px-4 py-3 focus:outline-none focus:border-gold transition-colors text-white placeholder-white/30"
+                  />
+                  <button 
+                    disabled={!oracleQuestion.trim() || isOracleLoading}
+                    className="bg-gold text-black p-3 rounded-xl disabled:opacity-50 transition-all hover:brightness-110 active:scale-95"
+                  >
+                    <ChevronRight className="w-6 h-6" />
+                  </button>
+                </form>
+              </div>
+            </motion.div>
+          )}
           {currentView === "home" && (
             <motion.div
               key="home"
@@ -191,12 +408,15 @@ export default function App() {
             >
               {/* Left Side: Interactive Input */}
               <div className="w-full lg:w-1/2 space-y-8">
-                <div className="space-y-4">
-                  <h1 className="text-4xl lg:text-5xl font-extralight text-white leading-tight italic font-serif">
-                    Gökyüzündeki en yakın <br/>
-                    <span className="text-gold not-italic font-sans font-medium uppercase tracking-tighter">Dostuna Hoş Geldin.</span>
-                  </h1>
-                  <p className="text-white/40 text-sm max-w-md">Yıldızların kadim bilgeliğiyle hayat yolculuğuna rehberlik etmek için buradayım. Doğum verilerini gir ve kaderinin haritasını çıkaralım.</p>
+                <div className="flex items-center gap-4">
+                  <button onClick={() => setCurrentView("dashboard")} className="p-2 glass rounded-full text-gold hover:bg-white/10 transition-colors">
+                    <RefreshCcw className="w-5 h-5 rotate-180" />
+                  </button>
+                  <div className="space-y-1">
+                    <h1 className="text-3xl lg:text-4xl font-extralight text-white italic font-serif">
+                      Kozmik <span className="text-gold not-italic font-sans font-medium uppercase tracking-tighter">Profilin.</span>
+                    </h1>
+                  </div>
                 </div>
 
                 <div className="glass rounded-[2.5rem] p-8 mystic-glow relative">
@@ -436,10 +656,16 @@ export default function App() {
       <nav className="fixed bottom-0 left-0 right-0 z-50 px-6 pb-8 pointer-events-none">
         <div className="max-w-md mx-auto glass rounded-[2.5rem] p-3 flex justify-around items-center border-t border-white/10 pointer-events-auto shadow-2xl backdrop-blur-3xl bg-black">
           <NavBtn 
-            active={currentView === "home"} 
-            onClick={() => setCurrentView("home")} 
+            active={currentView === "dashboard"} 
+            onClick={() => setCurrentView("dashboard")} 
             icon={<Home className="w-5 h-5" />} 
-            label="Evim" 
+            label="Giriş" 
+          />
+          <NavBtn 
+            active={currentView === "kahin"} 
+            onClick={() => setCurrentView("kahin")} 
+            icon={<Star className="w-5 h-5" />} 
+            label="Kahin" 
           />
           <NavBtn 
             active={currentView === "chart"} 
