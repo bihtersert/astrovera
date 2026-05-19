@@ -19,6 +19,7 @@ export async function createServer() {
   app.use(express.json());
 
   // Gemini AI entegrasyonu (Google GenAI SDK - Modern Approach)
+  const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.1-flash-lite";
   const ai = new GoogleGenAI({
     apiKey: process.env.GEMINI_API_KEY || "",
     httpOptions: {
@@ -27,6 +28,10 @@ export async function createServer() {
       }
     }
   });
+
+  if (!process.env.GEMINI_API_KEY) {
+    console.warn("UYARI: GEMINI_API_KEY bulunamadı. AI özellikleri çalışmayabilir.");
+  }
 
 // API Routes
   app.get("/api/firebase-config", (req, res) => {
@@ -39,6 +44,8 @@ export async function createServer() {
       messagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || process.env.FIREBASE_MESSAGING_SENDER_ID,
       appId: process.env.VITE_FIREBASE_APP_ID || process.env.FIREBASE_APP_ID,
       firestoreDatabaseId: process.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || process.env.FIREBASE_FIRESTORE_DATABASE_ID,
+      measurementId: process.env.VITE_FIREBASE_MEASUREMENT_ID || process.env.FIREBASE_MEASUREMENT_ID,
+      appUrl: process.env.APP_URL || process.env.VITE_APP_URL,
     };
 
     // Fallback to local file if essential fields are missing
@@ -65,6 +72,7 @@ export async function createServer() {
               messagingSenderId: config.messagingSenderId || fileConfig.messagingSenderId,
               appId: config.appId || fileConfig.appId,
               firestoreDatabaseId: config.firestoreDatabaseId || fileConfig.firestoreDatabaseId,
+              measurementId: config.measurementId || fileConfig.measurementId,
             };
             break;
           }
@@ -111,7 +119,7 @@ export async function createServer() {
       prompt += ` Yanıtı Türkçe ver.`;
 
       const response = await ai.models.generateContent({
-        model: "gemini-3.1-flash-lite",
+        model: GEMINI_MODEL,
         contents: prompt
       });
       res.json({ analysis: response.text });
@@ -137,7 +145,7 @@ export async function createServer() {
       Görevin kullanıcının sorusuna derin, mistik ve astrolojik temelli bir yanıt vermektir.`;
 
       const chat = ai.chats.create({
-        model: "gemini-3.1-flash-lite",
+        model: GEMINI_MODEL,
         config: { systemInstruction: systemPrompt },
         history: history ? history.map((h: any) => ({
           role: h.role === 'model' ? 'model' : 'user',
@@ -174,7 +182,7 @@ export async function createServer() {
       const userPrompt = `Niyet: ${intent}. Ruh Hali: ${mood || 'Belirtilmedi'}. Harita Verileri: ${JSON.stringify(chartData)}.`;
 
       const response = await ai.models.generateContent({
-        model: "gemini-3.1-flash-lite",
+        model: GEMINI_MODEL,
         contents: userPrompt,
         config: {
           systemInstruction: systemPrompt,
